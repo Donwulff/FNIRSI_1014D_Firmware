@@ -60,6 +60,60 @@
 #define UART1_DBG_DLL_REG      ((volatile uint32 *)(0x01C25400+0xB0))
 
 //----------------------------------------------------------------------------------------------------------------------------------
+
+#define GD_KEY_RUN_STOP 0x01
+#define GD_KEY_AUTO 0x02
+#define GD_KEY_MENU 0x03
+#define GD_KEY_S_PIC 0x04
+#define GD_KEY_S_WAV 0x05
+#define GD_KEY_H_CUR 0x06
+#define GD_KEY_V_CUR 0x07
+#define GD_KEY_NAV_LEFT 0x08
+#define GD_KEY_NAV_UP 0x09
+#define GD_KEY_NAV_OK 0x0A
+#define GD_KEY_NAV_DOWN 0x0B
+#define GD_KEY_NAV_RIGHT 0x0C
+#define GD_KEY_MOVE_SPEED 0x0D
+#define GD_KEY_CH1 0x0E
+#define GD_KEY_CONF_CH1 0x0F
+#define GD_KEY_CH2 0x10
+#define GD_KEY_CONF_CH2 0x11
+#define GD_KEY_ORIG 0x12
+#define GD_KEY_TRIG_MODE 0x13
+#define GD_KEY_TRIG_EDGE 0x14
+#define GD_KEY_TRIG_CHX 0x15
+#define GD_KEY_TRIG_50P 0x16
+#define GD_KEY_F1 0x17
+#define GD_KEY_F2 0x18
+#define GD_KEY_F3 0x19
+#define GD_KEY_F4 0x1A
+#define GD_KEY_F5 0x1B
+#define GD_KEY_F6 0x1C
+#define GD_KEY_GEN 0x1D
+#define GD_KEY_NEXT 0x1E
+#define GD_KEY_LAST 0x1F
+#define GD_KEY_DEL 0x20
+#define GD_KEY_SEE_ALL 0x21
+#define GD_KEY_SEL 0x22
+#define GD_TRIM_SEL_ADD 0x23
+#define GD_TRIM_SEL_SUB 0x24
+#define GD_TRIM_X_CH1_SUB 0x25
+#define GD_TRIM_X_CH1_ADD 0x26
+#define GD_TRIM_Y_CH2_SUB 0x27
+#define GD_TRIM_Y_CH2_ADD 0x28
+#define GD_TRIM_ORIG_SUB 0x29
+#define GD_TRIM_ORIG_ADD 0x2A
+#define GD_TRIM_TRIG_LEVEL_SUB 0x2B
+#define GD_TRIM_TRIG_LEVEL_ADD 0x2C
+#define GD_TRIM_SCALE_CH1_ADD 0x2D
+#define GD_TRIM_SCALE_CH1_SUB 0x2E
+#define GD_TRIM_SCALE_CH2_ADD 0x2F
+#define GD_TRIM_SCALE_CH2_SUB 0x30
+#define GD_TRIM_TIME_SUB 0x31
+#define GD_TRIM_TIME_ADD 0x32
+
+#define GD_OFF 0xC8
+
 //----------------------------------------------------------------------------------------------------------------------------------
 
 void uart1_setup(void);

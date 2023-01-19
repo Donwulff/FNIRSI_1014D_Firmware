@@ -86,10 +86,10 @@ void cg_i2c_setup(void)
   cg_i2c_send_data(CG_MS1_P3, &command, 1);
 
   // 0x35 53 MS1_P1[15:8] -- Integer part * 128 - 4
-//  command = 0x06; // 50MHz
+  command = 0x06; // 50MHz
 //  command = 0x05; // 66MHz
 //  command = 0x04; // 75MHz
-  command = 0x03; // 80MHz
+//  command = 0x03; // 80MHz
   cg_i2c_send_data(CG_MS1_P1B, &command, 1);
 
 
@@ -338,10 +338,12 @@ void uart1_setup(void)
 //----------------------------------------------------------------------------------------------------------------------------------
 
 void display_stage( uint8 stage ) {
+#ifdef DEBUG
   display_set_fg_color(0x00FFFFFF);
   display_fill_rect(80, 0, 80, 38);
   display_set_fg_color(0x00000000);
   display_decimal( 80, 10, stage );
+#endif /* DEBUG */
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -360,9 +362,10 @@ void uart1_handler(void)
   //wait for data in receive FIFO
 //  while(!(*UART1_USR_REG & 0x8));
 
+  uint8 val = *UART1_RX_REG;
+#ifdef DEBUG
   //display read data
   static uint8 sval = 0;
-  uint8 val = *UART1_RX_REG;
   if(val) {
     sval=val;
     display_set_fg_color(0x00FFFFFF);
@@ -386,16 +389,17 @@ void uart1_handler(void)
   display_hex(30, 10, 1, smsr);
 
   display_hex(30, 20, 1, *UART1_DBG_DLL_REG);
+#endif /* DEBUG */
 
-  if( 0x02 == val ) {
+  if( GD_KEY_AUTO == val ) {
     scope_do_auto_setup();
   }
 
-  if( val == 0x03 ) {
+  if( GD_KEY_MENU == val ) {
     scope_setup_usb_screen();
   }
 
-  if( 15 == val ) {
+  if( GD_KEY_CONF_CH1 == val ) {
     //Enable the channel
     scopesettings.channel1.magnification = (scopesettings.channel1.magnification + 1) % 3;
 
@@ -403,7 +407,7 @@ void uart1_handler(void)
     scope_channel_settings(&scopesettings.channel1, 0);
   }
 
-  if( 17 == val ) {
+  if( GD_KEY_CONF_CH2 == val ) {
     //Enable the channel
     scopesettings.channel2.magnification = (scopesettings.channel2.magnification + 1) % 3;
 
@@ -411,7 +415,7 @@ void uart1_handler(void)
     scope_channel_settings(&scopesettings.channel2, 0);
   }
 
-  if( 19 == val ) {
+  if( GD_KEY_TRIG_MODE == val ) {
     display_stage( 0 );
 
     scopesettings.triggermode = 0; // (scopesettings.triggermode ^ 2) % 3;
@@ -439,7 +443,7 @@ void uart1_handler(void)
   }
 
   // Okay this starts to be where code should be unified...
-  if( 21 == val ) {
+  if( GD_KEY_TRIG_CHX == val ) {
     //Set the channel 1 as trigger source
     scopesettings.triggerchannel = scopesettings.triggerchannel ? 0 : 1;
 
@@ -466,7 +470,7 @@ void uart1_handler(void)
   }
   tracecmd = val;
 
-  if( 37 == val ) {
+  if( GD_TRIM_X_CH1_SUB == val ) {
     //Update the current position
     scopesettings.channel1.traceposition -= traceadj;
 
@@ -476,7 +480,7 @@ void uart1_handler(void)
     display_stage( 10 );
   }
 
-  if( 38 == val ) {
+  if( GD_TRIM_X_CH1_ADD == val ) {
     //Update the current position
     scopesettings.channel1.traceposition += traceadj;
 
@@ -486,7 +490,7 @@ void uart1_handler(void)
     display_stage( 11 );
   }
 
-  if( 39 == val ) {
+  if( GD_TRIM_Y_CH2_SUB == val ) {
     //Update the current position
     scopesettings.channel2.traceposition -= traceadj;
 
@@ -496,7 +500,7 @@ void uart1_handler(void)
     display_stage( traceadj );
   }
 
-  if( 40 == val ) {
+  if( GD_TRIM_Y_CH2_ADD == val ) {
     //Update the current position
     scopesettings.channel2.traceposition += traceadj;
 
@@ -507,7 +511,7 @@ void uart1_handler(void)
   }
 
   if( 0 == scopesettings.triggerchannel ) {
-    if( 43 == val ) {
+    if( GD_TRIM_TRIG_LEVEL_SUB == val ) {
       //Update the current position
       scopesettings.triggerlevel--;
 
@@ -517,7 +521,7 @@ void uart1_handler(void)
       display_stage( traceadj );
     }
 
-    if( 44 == val ) {
+    if( GD_TRIM_TRIG_LEVEL_ADD == val ) {
       //Update the current position
       scopesettings.triggerlevel++;
 
@@ -527,7 +531,7 @@ void uart1_handler(void)
       display_stage( traceadj );
     }
   } else {
-    if( 43 == val ) {
+    if( GD_TRIM_TRIG_LEVEL_SUB == val ) {
       //Update the current position
       scopesettings.triggerlevel--;
 
@@ -537,7 +541,7 @@ void uart1_handler(void)
       display_stage( traceadj );
     }
 
-    if( 44 == val ) {
+    if( GD_TRIM_TRIG_LEVEL_ADD == val ) {
       //Update the current position
       scopesettings.triggerlevel++;
 
@@ -548,8 +552,8 @@ void uart1_handler(void)
     }
   }
 
-  if( 45 == val || 46 == val ) {
-    if( 45 == val ) {
+  if( GD_TRIM_SCALE_CH1_ADD == val || GD_TRIM_SCALE_CH1_SUB == val ) {
+    if( GD_TRIM_SCALE_CH1_ADD == val ) {
       //Step up to the next setting. (Lowering the setting)
       scopesettings.channel1.displayvoltperdiv++;
     } else {
@@ -577,8 +581,8 @@ void uart1_handler(void)
     }
   }
 
-  if( 47 == val || 48 == val ) {
-    if( 47 == val ) {
+  if( GD_TRIM_SCALE_CH2_ADD == val || GD_TRIM_SCALE_CH2_SUB == val ) {
+    if( GD_TRIM_SCALE_CH2_ADD == val ) {
       //Step up to the next setting. (Lowering the setting)
       scopesettings.channel2.displayvoltperdiv++;
     } else {
@@ -606,7 +610,7 @@ void uart1_handler(void)
     }
   }
 
-  if( 49 == val ) {
+  if( GD_TRIM_TIME_ADD == val ) {
     if( scopesettings.samplerate < 16 ) {
       scopesettings.samplerate++;
       fpga_set_sample_rate( scopesettings.samplerate );
@@ -619,7 +623,7 @@ void uart1_handler(void)
     }
   }
 
-  if( 50 == val ) {
+  if( GD_TRIM_TIME_SUB == val ) {
     if( scopesettings.samplerate > 0 ) {
       scopesettings.samplerate--;
       fpga_set_sample_rate( scopesettings.samplerate );
