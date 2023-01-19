@@ -63,13 +63,14 @@ OBJECTFILES= \
 	${OBJECTDIR}/start.o \
 	${OBJECTDIR}/statemachine.o \
 	${OBJECTDIR}/timer.o \
-	${OBJECTDIR}/touchpanel.o \
+	${OBJECTDIR}/touchpanel_disable.o \
+	${OBJECTDIR}/port_a.o \
 	${OBJECTDIR}/usb_interface.o \
 	${OBJECTDIR}/variables.o
 
 
 # C Compiler Flags
-CFLAGS=-Wall -Wno-write-strings -Wno-char-subscripts -fno-stack-protector -DNO_STDLIB=1 -mcpu='arm926ej-s' -O3 -mfloat-abi=soft
+CFLAGS=-Wall -Wno-write-strings -Wno-char-subscripts -fno-stack-protector -DNO_STDLIB=1 -mcpu='arm926ej-s' -Og -g -mfloat-abi=soft
 
 # CC Compiler Flags
 CCFLAGS=
@@ -227,10 +228,15 @@ ${OBJECTDIR}/timer.o: timer.c
 	${RM} "$@.d"
 	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/timer.o timer.c
 
-${OBJECTDIR}/touchpanel.o: touchpanel.c
+${OBJECTDIR}/touchpanel_disable.o: touchpanel_disable.c
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
-	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/touchpanel.o touchpanel.c
+	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/touchpanel_disable.o touchpanel_disable.c
+
+${OBJECTDIR}/port_a.o: port_a.c
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/port_a.o port_a.c
 
 ${OBJECTDIR}/usb_interface.o: usb_interface.c
 	${MKDIR} -p ${OBJECTDIR}

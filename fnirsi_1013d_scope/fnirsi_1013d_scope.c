@@ -9,6 +9,7 @@
 #include "display_control.h"
 #include "fpga_control.h"
 #include "touchpanel.h"
+#include "port_a.h"
 #include "power_and_battery.h"
 
 #include "fnirsi_1013d_scope.h"
@@ -59,6 +60,9 @@ int main(void)
 
   //Enable interrupts only once. In the original code it is done on more then one location.
   arm32_interrupt_enable();
+
+  //Setup the touch panel interface
+  cg_i2c_setup();
 
   //Initialize SPI for flash (PORT C + SPI0)
   sys_spi_flash_init();
@@ -160,6 +164,8 @@ int main(void)
   //Set screen brightness
   fpga_set_translated_brightness();
   
+  uart1_setup();
+
   //Monitor the battery, process and display trace data and handle user input until power is switched off
   while(1)
   {
@@ -174,6 +180,8 @@ int main(void)
 
     //Handle the touch panel input
     touch_handler();
+
+    uart1_handler();
   }
 }
 
