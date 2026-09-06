@@ -140,10 +140,17 @@ Requires `arm-none-eabi-gcc`. NetBeans-generated makefiles; config `Debug` is th
 `Debug` builds).
 
 ```bash
+export C_INCLUDE_PATH=/tmp/arm-none-eabi-newlib/usr/arm-none-eabi/include   # see note below
 cd fnirsi_101xd_scope
 make            # compile → link → objcopy → mksunxi → bootloader overlay via flashfilepacker
 make clean
 ```
+
+**Header note (2026-09-04):** on this build server `arm-none-eabi-gcc` is installed but the
+`arm-none-eabi-newlib` package is not, so `variables.h`'s `#include <string.h>` fails unless
+`C_INCLUDE_PATH` points at the extracted newlib tree above (only headers are used; the link
+is `-nostdlib`). `/tmp` does not survive a reboot — if the tree is gone, reinstall the package
+or restore the copy. A failed `make` also deletes the `.o.d` of the file it was compiling.
 
 The Makefile echoes `[port_config.h variant: …]` first and `>>> BOOTLOADER: …` near the end.
 **Always confirm both before flashing**: 1014D must say `v1.00o5-1014D` and
@@ -208,10 +215,11 @@ on `enabletracedisplay` OR `ui_menu_composite_active()` — open overlay menus a
 into the offscreen buffer each frame by `ui_redraw_active_menu()`, so traces stay live under
 them). Config is saved on the key controller's power-off code (`UIC_BUTTON_OFF`).
 
-Input flow: `uart1_get_user_input()` returns a raw key byte (blocking poll — write `0xFF`,
-wait for response) that is dispatched directly against `UIC_BUTTON_*`/`UIC_ROTARY_*` codes in
-`sm_1014d.c` (the `GD_KEY_*` table in `uart.h` is documentation only; pecostm32's UIC mapping
-is the confirmed-correct one — PORT_AUDIT.md F5).
+Input flow: `uart1_get_user_input()` returns a raw key byte (non-blocking poll — write `0xFF`
+when TX empty, return 0 until RX ready; 20 ms WAIT_RX timeout, then drain a late byte
+before the next poll — `uart_poll.c`, ROADMAP 4) that is dispatched directly against
+`UIC_BUTTON_*`/`UIC_ROTARY_*` codes in `sm_1014d.c` (the `GD_KEY_*` table in `uart.h` is
+documentation only; pecostm32's UIC mapping is the confirmed-correct one — PORT_AUDIT.md F5).
 
 Shared core (both variants): `scope_functions.c`, `fpga_control.c`, `variables.c/.h`,
 storage/USB. Variant separation uses three distinct mechanisms (clarified 2026-08-21 —

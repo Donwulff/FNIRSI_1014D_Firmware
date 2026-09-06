@@ -14,7 +14,11 @@
 #include "DS3231.h"
 
 #include "usb_interface.h"
+#include "uart.h"
 #include "variables.h"
+#if PORT_1014D
+#include "menu_1014d.h"
+#endif
 
 #include "sin_cos_math.h"
 
@@ -665,6 +669,15 @@ void scope_get_long_timebase_data1(void)
             previoustimerticks = curticks;
             goto skip_delay;
         }
+
+#if PORT_1014D
+        //1013D aborts this wait on touch; havetouch is a stub here so keys felt dead
+        //until the per-sample timeout (up to 1 s at 50 s/div). Non-blocking poll.
+        if(uart1_get_user_input())
+        {
+            break;
+        }
+#endif
     
         //Scan the touch panel to see if there is user input
         tp_i2c_read_status();
@@ -827,6 +840,11 @@ void scope_get_long_timebase_data(void)
   uint32    timeout = 1000;
   uint32    curticks;
 
+#if PORT_1014D
+  //preset_values (and the wrap path) may leave tmp selected; crawl must hit the panel.
+  display_set_screen_buffer((uint16 *)maindisplaybuffer);
+#endif
+
   
   if((scopesettings.runstate)&&(!triggerlong)&&(scopesettings.triggermode))
         {scope_check_long_trigger();}
@@ -906,6 +924,15 @@ void scope_get_long_timebase_data(void)
             previoustimerticks = curticks;
             goto skip_delay;
         }
+
+#if PORT_1014D
+        //1013D aborts this wait on touch; havetouch is a stub here so keys felt dead
+        //until the per-sample timeout (up to 1 s at 50 s/div). Non-blocking poll.
+        if(uart1_get_user_input())
+        {
+            break;
+        }
+#endif
     
         //Scan the touch panel to see if there is user input
         tp_i2c_read_status();
@@ -937,12 +964,12 @@ void scope_get_long_timebase_data(void)
     
     if ( scopesettings.count > 2999)   //2999 
     {   scopesettings.count = 0;      //reset buffer pointer 
-    
-        //Draw the grid lines and dots based on the grid brightness setting
+#if !PORT_1014D
+        //Not a full clear — paints the 1013D slider onto the live crawl.
+        //1014D wrap (xpos>704) already redraws the P14 grid.
         scope_draw_grid();
-    
-        //Draw the signal center, trigger level and trigger position pointers
         scope_draw_pointers();
+#endif
         //disp_first_sample = 0;
     }
 
@@ -984,22 +1011,23 @@ void scope_get_long_timebase_data(void)
         //Check if not in waveform view mode (Scope mode) with grid disabled
         if((!scopesettings.waveviewmode) || (scopesettings.gridenable))
         {
-            //Draw the grid lines and dots based on the grid brightness setting
+#if PORT_1014D
+            ui_draw_grid();
+#else
             scope_draw_grid();
+#endif
         }
     
-        //Draw the signal center, trigger level and trigger position pointers
-        scope_draw_pointers();
-    
-        //Draw the cursors with their measurement displays
-        scope_draw_time_cursors();
-        scope_draw_volt_cursors();
-        scope_display_cursor_measurements();
-    
 #if PORT_1014D
+        ui_draw_pointers();
+        ui_display_cursors();
         scopesettings.xpos = 7;
         scopesettings.lastx = 6;
 #else
+        scope_draw_pointers();
+        scope_draw_time_cursors();
+        scope_draw_volt_cursors();
+        scope_display_cursor_measurements();
         scopesettings.xpos = 4;
         scopesettings.lastx = 3;
 #endif
@@ -1009,7 +1037,8 @@ void scope_get_long_timebase_data(void)
         display_set_source_buffer(displaybuffertmp);//1
         display_set_screen_buffer((uint16 *)maindisplaybuffer);
 #if PORT_1014D
-        display_copy_rect_to_screen(2, 48, 705, 432);
+        //Stop at the trace window (y 48…459). Height 432 overwrote POS/DIV and Waiting.
+        display_copy_rect_to_screen(2, 48, 705, TRACE_WINDOW_BORDER_YPOS + TRACE_WINDOW_BORDER_HEIGHT + 1 - 48);
 #else
         display_copy_rect_to_screen(0, 48, 730, 432); //403
 #endif
@@ -1055,10 +1084,16 @@ void scope_get_long_timebase_data(void)
     
       //Calculate the start and end x coordinates
     
-    if (scopesettings.count < 750) { disp_xstart = 0; disp_xend = 750; scopesettings.triggerhorizontalposition = 375;}
-    else if (scopesettings.count < 1500) { disp_xstart = 750; disp_xend = 1500; scopesettings.triggerhorizontalposition = 1125;}
-    else if (scopesettings.count < 2250) { disp_xstart = 1500; disp_xend = 2250;scopesettings.triggerhorizontalposition = 1875;}
-    else if (scopesettings.count < 3000) { disp_xstart = 2250; disp_xend = 3000;scopesettings.triggerhorizontalposition = 2625;}
+    if (scopesettings.count < 750) { disp_xstart = 0; disp_xend = 750; }
+    else if (scopesettings.count < 1500) { disp_xstart = 750; disp_xend = 1500; }
+    else if (scopesettings.count < 2250) { disp_xstart = 1500; disp_xend = 2250; }
+    else if (scopesettings.count < 3000) { disp_xstart = 2250; disp_xend = 3000; }
+#if !PORT_1014D
+    if (scopesettings.count < 750) scopesettings.triggerhorizontalposition = 375;
+    else if (scopesettings.count < 1500) scopesettings.triggerhorizontalposition = 1125;
+    else if (scopesettings.count < 2250) scopesettings.triggerhorizontalposition = 1875;
+    else if (scopesettings.count < 3000) scopesettings.triggerhorizontalposition = 2625;
+#endif
   //disp_xend = triggerposition + xrange;
     
     

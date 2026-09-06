@@ -69,6 +69,8 @@ void sm_init(void)
 
 void sm_handle_user_input(void)
 {
+  int n = 0;
+
   //Get the latest command to be processed
   if(uart1_get_user_input() == 0)
   {
@@ -76,6 +78,8 @@ void sm_handle_user_input(void)
     return;
   }
 
+  do
+  {
   //Check if the power off command is given
   if(toprocesscommand == UIC_BUTTON_OFF)
   {
@@ -241,6 +245,8 @@ void sm_handle_user_input(void)
   
   //Signal the active command has been processed
   toprocesscommand = 0;
+  n++;
+  } while((n < 8) && uart1_collect_next_command(3));
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -1454,17 +1460,17 @@ void sm_set_time_base(void)
   {
     scopesettings.timeperdiv = newvalue;
 
-    //Long/short time base overlap: the 35-entry table has 200ms/100ms/50ms/20ms in BOTH the
-    //long-timebase (roll) block (indices 7..10) and the short/sweep block (indices 11..14),
-    //so the dial showed e.g. "100ms" twice and the roll rendering (Atlan4 1013D code, glitchy
-    //on this unit) triggered at 100ms. Move the boundary so the roll block only serves the
-    //genuinely slow settings (<=500ms, index 6) and 200ms/100ms/50ms/20ms are reached only in
-    //sweep mode. Crossing up from 500ms(6) jumps to 200ms sweep(11); crossing down from
-    //200ms sweep(11) jumps to 500ms roll(6); indices 7..10 become unreachable via the dial.
+    //Overlap: 200/100/50/20 ms exist in both the roll block (7..10) and the sweep block
+    //(11..14). Stock FPGA uses 0x28/0x01 (roll) for 100 ms/div and slower, 0x28/0x00
+    //below that. Keep 200 ms and 100 ms as roll (indices 7, 8); skip the 50/20 ms roll
+    //duplicates (9, 10) and the 200/100 ms sweep duplicates (11, 12). Dial: 100 ms roll
+    //(8) toward faster -> 50 ms sweep (13); 50 ms sweep (13) toward slower -> 100 ms roll
+    //(8). F21's 6<->11 jump had put 200/100 ms on the sweep converter, which never
+    //completes on stock FPGA at those rates.
     if(!scopesettings.waveviewmode)
     {
-      if(scopesettings.timeperdiv == 7)  { scopesettings.timeperdiv = 11; scopesettings.long_mode = 0; }
-      if(scopesettings.timeperdiv == 10) { scopesettings.timeperdiv = 6;  scopesettings.long_mode = 1; }
+      if(scopesettings.timeperdiv == 9)  scopesettings.timeperdiv = 13;
+      if(scopesettings.timeperdiv == 12) scopesettings.timeperdiv = 8;
     }
 
     //Long time base

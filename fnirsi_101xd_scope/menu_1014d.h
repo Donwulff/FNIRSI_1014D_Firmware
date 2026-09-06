@@ -151,6 +151,8 @@ void ui_display_trigger_horizontal_position(void);
 
 void ui_display_time_per_division(void);
 void ui_display_waiting_triggered_text(uint32 state);
+uint32 ui_trigger_banner_state(void);
+void ui_draw_roll_chrome(void);
 
 void ui_display_channel_settings(PCHANNELSETTINGS settings);
 
@@ -166,6 +168,8 @@ void ui_display_channel_position(PCHANNELSETTINGS settings);
 
 void ui_display_measurements(void);
 void ui_update_measurements(void);
+uint8 ui_display_frame_due(void);
+void ui_draw_speed_overlay(void);
 
 void ui_display_main_menu(void);
 void ui_unhighlight_main_menu_item(void);

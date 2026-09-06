@@ -33,6 +33,9 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
    every main-loop pass, gating the frame rate on UART turnaround. Move UART1 RX to the
    interrupt controller (interrupt.c infra exists) or a poll-without-wait design; add rotary
    acceleration using the existing `movespeed`.
+   *Landed in code 2026-09-04 (poll-without-wait, not IRQ): `uart_poll.c` state machine,
+   host tests in `tools/test_uart_poll.c`. `uart1_wait_for_user_input()` loops the poll.
+   Rotary acceleration not done. Hardware-verify pending.*
 5. **Warning cleanup → then `-Werror`** — the 234 `-Wpointer-sign` warnings are mechanical
    `int8*`/`char*` mismatches from the (correct) signed-int8 fix; unify the string types
    (`char*` for text, `int8` only for numeric bytes). Real bugs hide badly in 260-line
@@ -290,10 +293,15 @@ bitstream (deeper/settable capture via 0x0B/0x0C) is a separate track (items 16�
     section map with DRAM write-back cacheable, the DEBE-scanned framebuffer write-through
     or uncached, everything `0x01Cxxxxx`/`0x01Exxxxx` device-uncacheable (FPGA Port-E bus,
     INTC, SD, USB FIFO, TCON/DEBE), cache clean/invalidate discipline at the DMA seams.
+    *Landed in code 2026-09-04: `mmu_map.c` + `mmu.c`, framebuffer at `0x81D00000` NCNB,
+    FEL `mmu_off_for_brom()`. Host tests `tools/test_mmu_map.c`. Hardware-verify pending.*
 32. **Roll wait loop should poll keys.** `scope_get_long_timebase_data`'s inter-sample wait
     (up to 1 s/sample at 50 s/div) only exits by timeout on the 1014D — the touch-abort is a
     stub — so keys feel dead in roll. Design: slice the wait and poll the key controller
     between slices (needs a non-blocking or pushback-capable uart1 read).
+    *Landed in code 2026-09-04: 1014D wait loop in `test.c` calls `uart1_get_user_input()`
+    and breaks like the 1013D touch abort (then the existing 30 ms delay). Depends on item 4.
+    Hardware-verify pending.*
 33. **MSC protocol repairs, designed but NOT applied (need host-side bench):** WRITE_10
     silently drops one 512 B packet per staging-buffer flush (large-write corruption,
     inherited from Atlan4/pecostm32); READ_FORMAT_CAPACITY replies with stale/zero bytes in

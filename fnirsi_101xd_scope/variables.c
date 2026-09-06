@@ -151,6 +151,7 @@ uint8 keymenuopen;                  //flag for open the keyboard menu
 
 uint8 calibrationfail = 0;          //flag calibration failed ,1-failed
 uint8 triggerlong = 0;              //flag signal is triggered
+uint8 display_triggered = 0;        //sweep Waiting/Triggered latch (Auto stays set)
 uint8 trigger50 = 0;                //flag for channel settings 50% button 
 uint8 restore = 0;                  //flag restore default data ok
 

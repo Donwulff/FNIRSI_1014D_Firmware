@@ -265,9 +265,13 @@ void scope_adjust_timebase_and_voltdiv (void)
     
   if(scopesettings.long_mode) //if set long time base, no drawn.
   {
-      
+#if PORT_1014D
+    scopesettings.xpos = 7;
+    scopesettings.lastx = 6;
+#else
     scopesettings.xpos = 4;
     scopesettings.lastx = 3;
+#endif
     scopesettings.count = 0;
     
     //scopesettings.lastx=726;
@@ -280,9 +284,27 @@ void scope_adjust_timebase_and_voltdiv (void)
     if(scopesettings.triggermode) triggerlong = 0; else triggerlong = 1;
     
     //y position for the channel 1 trace center pointer.
+#if PORT_1014D
+    scopesettings.channel1.sample1 = TRACE_VERTICAL_END - scopesettings.channel1.traceposition;
+    scopesettings.channel2.sample1 = TRACE_VERTICAL_END - scopesettings.channel2.traceposition;
+#else
     scopesettings.channel1.sample1 = 442 - scopesettings.channel1.traceposition;//441
-    //y position for the channel 2 trace center pointer.
-    scopesettings.channel2.sample1 = 442 - scopesettings.channel2.traceposition;//441  
+    scopesettings.channel2.sample1 = 442 - scopesettings.channel2.traceposition;//441
+#endif
+
+#if PORT_1014D
+    //P14 grid/pointers — not scope_draw_grid, which paints the 1013D buffer slider
+    //at y=452 (yellow "~" row) over the 1014D bottom chrome.
+    if((!scopesettings.waveviewmode) || (scopesettings.gridenable))
+    {
+      ui_draw_grid();
+    }
+    ui_draw_pointers();
+    ui_display_cursors();
+    display_set_source_buffer(displaybuffertmp);
+    display_set_screen_buffer((uint16 *)maindisplaybuffer);
+    display_copy_rect_to_screen(2, 48, 705, TRACE_WINDOW_BORDER_YPOS + TRACE_WINDOW_BORDER_HEIGHT + 1 - 48);
+#endif
     
   } 
   else //if((scopesettings.runstate))//1-run
@@ -761,17 +783,21 @@ void scope_acquire_trace_data(void)
     //Sampling with trigger circuit enabled (standard memory mode)
     //if(scopesettings.long_memory) scopesettings.samplemode = 0; else scopesettings.samplemode = 1;
 
-    //Start the conversion
-    fpga_do_conversion();
-
-    //Flag conversion in progres
+    //Flag conversion in progress first: a key abort during the 0x05 wait sets
+    //display_data_done = 1 meaning "restart, do not use this capture".
     scopesettings.display_data_done = 0;
 
-
+#if PORT_1014D
+    fpga_conversion_abort_on_key(1);
+    fpga_do_conversion();
+    fpga_conversion_abort_on_key(0);
+#else
+    fpga_do_conversion();
+#endif
   }
   
   //Check until conversion done or touch panel active
-  if((fpga_done_conversion())&&(scopesettings.runstate)&&(touchstate == 0)) 
+  if((scopesettings.display_data_done == 0)&&(fpga_done_conversion())&&(scopesettings.runstate)&&(touchstate == 0)) 
   {
     //Check if in single mode
     if(scopesettings.triggermode == 1)
@@ -900,12 +926,19 @@ void scope_acquire_trace_data(void)
     //disp_have_trigger = 0;
     
     //flag data displayed, 1-for next conversion ready
-    scopesettings.display_data_done = 1; 
+    scopesettings.display_data_done = 1;
+#if PORT_1014D
+    speed_note_capture();
+    display_triggered = 1;
+#endif
     //flag next conversion for long memory mode
 
   }
-  //Display the trace data
+#if !PORT_1014D
+  //1014D main loop already calls scope_display_trace_data(); doing it here as well
+  //double-blits the NCNB framebuffer every pass and stalls keys on 1–50 ms/div.
   scope_display_trace_data();
+#endif
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -3779,8 +3812,7 @@ void scope_display_trace_data(void)
   //this the copy wipes their lower halves and leaves orphaned shade tops above y=48
   ui_draw_outline();
   ui_display_trigger_settings();
-  ui_display_waiting_triggered_text(
-      scopesettings.runstate == RUN_STATE_RUNNING ? 0 : 1);
+  ui_display_waiting_triggered_text(ui_trigger_banner_state());
   ui_draw_pointers();
   ui_display_cursors();
 
@@ -8132,6 +8164,13 @@ void scope_restore_config_data(void)
     scopesettings.channel2.dcoffset          = *ptr++;
     scopesettings.channel2.invert            = *ptr++;
 
+#if PORT_1014D
+    //AC: DC-offset trim does not apply (same as the F31 toggle). Saved DC trim
+    //would otherwise keep shifting Vavg after a boot with coupling==AC.
+    if(scopesettings.channel1.coupling) scopesettings.channel1.dcoffset = 0;
+    if(scopesettings.channel2.coupling) scopesettings.channel2.dcoffset = 0;
+#endif
+
     //Point to the trigger settings
     ptr = &settingsworkbuffer[TRIGGER_SETTING_OFFSET];
 
@@ -8293,7 +8332,20 @@ void scope_restore_config_data(void)
   fpgasettings.en_holdoff_trigger     = *ptr++;
   fpgasettings.value_holdoff_trigger  = *ptr++;
   
-  //---------------------------------------------------------------------------- 
+  //----------------------------------------------------------------------------
+#if PORT_1014D
+    //F21 saved 11/12 (200/100 ms sweep). Those indices never complete on stock FPGA.
+    //Map overlap copies to the legal roll/sweep slot and derive long_mode.
+    switch(scopesettings.timeperdiv)
+    {
+      case 9:  scopesettings.timeperdiv = 13; break;
+      case 10: scopesettings.timeperdiv = 14; break;
+      case 11: scopesettings.timeperdiv = 7;  break;
+      case 12: scopesettings.timeperdiv = 8;  break;
+    }
+    scopesettings.long_mode = (scopesettings.timeperdiv < 11);
+    scopesettings.samplerate = time_per_div_sample_rate[scopesettings.timeperdiv];
+#endif
   }
   else
   {

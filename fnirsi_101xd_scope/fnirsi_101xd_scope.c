@@ -446,9 +446,19 @@ int main(void)
     //standard renderer as well made the two repaint over each other every pass (F21
     //mechanism 1, REVIEW-2026-08-21 follow-up). Overlay menus are not composited during
     //roll -- the roll sweep's own blit would wipe them anyway.
-    if(!scopesettings.long_mode && (enabletracedisplay || ui_menu_composite_active()))
+    //Full-frame draws (blit + speed overlay) are capped to 60 Hz; acquire and keys
+    //still run every pass. Roll crawl is per-sample and is not gated here.
+    if(ui_display_frame_due())
     {
-        scope_display_trace_data();
+        if(scopesettings.long_mode)
+        {
+            ui_draw_roll_chrome();
+        }
+        else if(enabletracedisplay || ui_menu_composite_active())
+        {
+            scope_display_trace_data();
+        }
+        ui_draw_speed_overlay();
     }
 #else
     //1013D: handle the touch panel input
