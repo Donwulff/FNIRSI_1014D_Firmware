@@ -1,6 +1,8 @@
 MEMORY
 {
-	ram  : org = 0x7FFFFFE0, len = 32M
+	/* DRAM up to the NCNB framebuffer at 0x81D00000 (stacks stay in start.s). */
+	ram  : org = 0x7FFFFFE0, len = 0x1D00020
+	framebuffer : org = 0x81D00000, len = 1M
 }
 
 SECTIONS
@@ -26,6 +28,11 @@ SECTIONS
     *(.bss);
   } >ram
   BSS_END = .;
+
+  .framebuffer (NOLOAD) :
+  {
+    *(.framebuffer);
+  } >framebuffer
 }
 
 __program_size = PRGM_END - PRGM_START;

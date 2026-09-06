@@ -76,6 +76,8 @@ OBJECTFILES= \
 	${OBJECTDIR}/clock_synthesizer.o \
 	${OBJECTDIR}/uart.o \
 	${OBJECTDIR}/uart_poll.o \
+	${OBJECTDIR}/mmu.o \
+	${OBJECTDIR}/mmu_map.o \
 	${OBJECTDIR}/test.o \
 	${OBJECTDIR}/timer.o \
 	${OBJECTDIR}/touchpanel.o \
@@ -315,6 +317,16 @@ ${OBJECTDIR}/uart_poll.o: uart_poll.c
 	${MKDIR} -p ${OBJECTDIR}
 	${RM} "$@.d"
 	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/uart_poll.o uart_poll.c
+
+${OBJECTDIR}/mmu.o: mmu.c
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/mmu.o mmu.c
+
+${OBJECTDIR}/mmu_map.o: mmu_map.c
+	${MKDIR} -p ${OBJECTDIR}
+	${RM} "$@.d"
+	$(COMPILE.c) -g -MMD -MP -MF "$@.d" -o ${OBJECTDIR}/mmu_map.o mmu_map.c
 
 ${OBJECTDIR}/touchpanel.o: touchpanel.c
 	${MKDIR} -p ${OBJECTDIR}

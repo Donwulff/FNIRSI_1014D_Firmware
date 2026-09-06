@@ -33,6 +33,7 @@
 #include "PC_interface.h"
 
 #include "arm32.h"
+#include "mmu.h"
 
 #include "variables.h"
 
@@ -52,7 +53,9 @@ int main(void)
   //Initialize the clock system
   sys_clock_init();
 
-  //Instead of full memory management just the caches enabled
+  //Identity MMU so the D-cache C bit actually applies (ARM926 data cacheability
+  //comes from the page tables). Framebuffer and sunxi MMIO stay NCNB.
+  mmu_setup();
   arm32_icache_enable();
   arm32_dcache_enable();
 
