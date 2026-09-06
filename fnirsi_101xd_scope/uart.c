@@ -3,6 +3,8 @@
 #include "ccu_control.h"
 #include "gpio_control.h"
 #include "uart.h"
+#include "uart_poll.h"
+#include "timer.h"
 #include "variables.h"
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -42,19 +44,63 @@ void uart1_init(void)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+static UART1POLL uart1_poll;
+static uint8 uart1_last_action;
+
+static void uart1_kick(void)
+{
+  uint8 action;
+
+  action = uart1_poll_next(&uart1_poll, *UART1_LS_REG, timer0_get_ticks());
+  if(action == UART1_POLL_TX_FF)
+  {
+    *UART1_TX_REG = 0xFF;
+  }
+}
+
 uint8 uart1_receive_data(void)
 {
-  //Wait for the UART to be ready to transmit new data
-  while((*UART1_LS_REG & UART_LSR_TEMT) == 0);
+  uint8 action;
+  uint8 byte;
 
-  //Send the poll request byte to the target
-  *UART1_TX_REG = 0xFF;
+  //One 0xFF / one-byte reply. Never issue a second poll while a reply is outstanding.
+  action = uart1_poll_next(&uart1_poll, *UART1_LS_REG, timer0_get_ticks());
+  uart1_last_action = action;
 
-  //Wait for the response from the target
-  while((*UART1_LS_REG & UART_LSR_DR) == 0);
+  if(action == UART1_POLL_TX_FF)
+  {
+    *UART1_TX_REG = 0xFF;
+    return(0);
+  }
 
-  //Return the received data
-  return(*UART1_RX_REG);
+  if(action == UART1_POLL_READ_RX)
+  {
+    byte = (uint8)*UART1_RX_REG;
+    //Start the next poll now so the GD32 reply overlaps acquire/display, and
+    //so sm_handle can drain queued rotary detents in the same frame.
+    uart1_kick();
+    return(byte);
+  }
+
+  return(0);
+}
+
+uint8 uart1_collect_next_command(uint32 timeout_ms)
+{
+  uint32 t0 = timer0_get_ticks();
+  uint8 byte;
+
+  while((timer0_get_ticks() - t0) < timeout_ms)
+  {
+    byte = uart1_receive_data();
+    if(uart1_last_action == UART1_POLL_READ_RX)
+    {
+      toprocesscommand = byte;
+      return(byte);
+    }
+  }
+
+  return(0);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
