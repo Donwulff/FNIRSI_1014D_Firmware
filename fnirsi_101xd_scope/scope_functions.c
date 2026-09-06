@@ -6471,15 +6471,10 @@ int32 load_picture(const char* filename)
       //timer0_delay(3000);
     }
   }
-  else
+  //No file: boot splash is optional (scope.bmp is not shipped).
+  else if(result != FR_NO_FILE)
   {
-    //Signal unable to open the file
     scope_display_file_status_message(MESSAGE_FILE_OPEN_FAILED, 0);
-    //display_set_fg_color(RED_COLOR);
-    //display_text(300, 230, "MESSAGE_FILE_OPEN_FAILED");
-    //display_set_fg_color(YELLOW_COLOR);
-    //display_text(250, 250, "Please copy the update.bmp file to the SD card.");
-    //timer0_delay(5000);
   }
 
   //Check if all went well
