@@ -207,12 +207,12 @@ SCOPESETTINGS savedscopesettings2;
 uint32 channel1tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 uint32 channel1tracebufferAVG[MAX_SAMPLE_BUFFER_SIZE];
 
-DISPLAYPOINTS channel1pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS channel1pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
 
 uint32 channel2tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 uint32 channel2tracebufferAVG[MAX_SAMPLE_BUFFER_SIZE];
 
-DISPLAYPOINTS channel2pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS channel2pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
 
 uint32 ref1_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 uint32 ref2_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
@@ -224,19 +224,19 @@ uint32 ref6_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 uint32 ref7_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 uint32 ref8_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
-DISPLAYPOINTS ref1pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-DISPLAYPOINTS ref2pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-DISPLAYPOINTS ref3pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-DISPLAYPOINTS ref4pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref1pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref2pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref3pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref4pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
 
-DISPLAYPOINTS ref5pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-DISPLAYPOINTS ref6pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-DISPLAYPOINTS ref7pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-DISPLAYPOINTS ref8pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref5pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref6pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref7pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+DISPLAYPOINTS ref8pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
 
 uint32 math_channel_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
-uint16 thumbnailtracedata[730];     
+uint16 thumbnailtracedata[THUMBNAIL_TRACE_DATA_SIZE];
 
 uint16 settingsworkbuffer[256];               //Used for loading from and writing the settings to the SD card
 

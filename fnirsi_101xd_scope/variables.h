@@ -51,9 +51,9 @@
 #define VIEW_ITEM_XLAST                 720
 
 #define VIEW_THUMBNAIL_DATA_SIZE     400000
-#define VIEW_FILE_NUMBER_DATA_SIZE     2000
 
-#define VIEW_MAX_ITEMS                 1000
+#define TRACE_POINT_BUFFER_SIZE       (SCREEN_WIDTH * 2)
+#define THUMBNAIL_TRACE_DATA_SIZE     SCREEN_WIDTH
 
 #define VIEW_ITEMS_PER_PAGE              16
 
@@ -530,6 +530,12 @@
 //floored /4 (4095 words = 16380 bytes) left every trace array 2 bytes short of them
 #define UINT32_SAMPLE_BUFFER_SIZE         ((MAX_SAMPLE_BUFFER_SIZE + 3) / 4)
 
+#define FPGA_DEFAULT_TOTAL_SAMPLES        3000
+#define FPGA_DEFAULT_TRIGGER_POINT        1500
+#define FPGA_MIN_TOTAL_SAMPLES              80
+#define FPGA_MIN_TRIGGER_POINT              20
+#define FPGA_POST_TRIGGER_MARGIN            60
+
 #define SAMPLE_COUNT                      MAX_SAMPLE_BUFFER_SIZE //samplecount  10000
 #define SAMPLES_PER_ADC                   (SAMPLE_COUNT / 2)        //nofsamples 5000
 
@@ -874,6 +880,9 @@ struct tagThumbnailData
   uint8 channel2data[VIEW_ITEM_TRACE_POINTS];
 };
 
+#define VIEW_MAX_ITEMS                (VIEW_THUMBNAIL_DATA_SIZE / sizeof(THUMBNAILDATA))
+#define VIEW_FILE_NUMBER_DATA_SIZE    (VIEW_MAX_ITEMS * sizeof(uint16))
+
 //----------------------------------------------------------------------------------------------------------------------------------
 
 struct tagPathInfo
@@ -1131,7 +1140,7 @@ extern uint32 channel1tracebufferAVG[MAX_SAMPLE_BUFFER_SIZE];
 
 //extern uint32 channel1_tmp_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
-extern DISPLAYPOINTS channel1pointsbuffer[730];
+extern DISPLAYPOINTS channel1pointsbuffer[TRACE_POINT_BUFFER_SIZE];
 //-------------------------------------------------------------
 extern uint32 channel2tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
@@ -1144,7 +1153,7 @@ extern uint32 channel2tracebufferAVG[MAX_SAMPLE_BUFFER_SIZE];
 
 //extern uint32 channel2_tmp_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
-extern DISPLAYPOINTS channel2pointsbuffer[730];
+extern DISPLAYPOINTS channel2pointsbuffer[TRACE_POINT_BUFFER_SIZE];
 //-------------------------------------------------------------
 
 extern uint32 ref1_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
@@ -1157,19 +1166,19 @@ extern uint32 ref6_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 extern uint32 ref7_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 extern uint32 ref8_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
-extern DISPLAYPOINTS ref1pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-extern DISPLAYPOINTS ref2pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-extern DISPLAYPOINTS ref3pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-extern DISPLAYPOINTS ref4pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref1pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref2pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref3pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref4pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
 
-extern DISPLAYPOINTS ref5pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-extern DISPLAYPOINTS ref6pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-extern DISPLAYPOINTS ref7pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
-extern DISPLAYPOINTS ref8pointsbuffer[730];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref5pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref6pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref7pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
+extern DISPLAYPOINTS ref8pointsbuffer[TRACE_POINT_BUFFER_SIZE];      //Buffer to store the x,y positions of the trace on the display
 
 extern uint32 math_channel_tracebuffer[UINT32_SAMPLE_BUFFER_SIZE];
 
-extern uint16 thumbnailtracedata[730]; 
+extern uint16 thumbnailtracedata[THUMBNAIL_TRACE_DATA_SIZE];
 
 extern uint16 settingsworkbuffer[256];
 
@@ -1532,4 +1541,3 @@ extern uint8  measurementslot;
 //----------------------------------------------------------------------------------------------------------------------------------
 
 #endif /* VARIABLES_H */
-

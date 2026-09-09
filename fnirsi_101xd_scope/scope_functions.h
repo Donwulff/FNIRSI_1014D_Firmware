@@ -160,6 +160,7 @@ void scope_save_configuration_data(void);
 void scope_load_input_calibration_data(void);
 void scope_save_input_calibration_data(void);
 
+void scope_sanitize_fpga_sample_settings(void);
 void scope_reset_config_data(void);
 
 void scope_save_config_data(void);

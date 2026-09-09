@@ -1539,10 +1539,7 @@ if (c == '\n' || c == '\r')
                 case 'c': c = val; break;
                 case 'd': d = val; break;
                 case 'e': e = val; break;
-                //Clamp to the trace buffer capacity: an unclamped value made every later
-                //acquisition write up to ~44KB past each channel buffer (and persist via
-                //the config sector) -- Atlan4 debug back door, REVIEW-2026-08-21
-                case 'f': f = val; if(f > MAX_SAMPLE_BUFFER_SIZE) f = MAX_SAMPLE_BUFFER_SIZE; fpgasettings.totalsamples = f; break;
+                case 'f': f = val; fpgasettings.totalsamples = f; scope_sanitize_fpga_sample_settings(); break;
                 case 'g': g = val; scopesettings.ACQ_trace = g; break;
                 case 'h': h = val; break;
                 case 'i': i = val; break;
@@ -1753,5 +1750,4 @@ void usb_cdc_set_control_line_state(uint16 value)
 }
 
 //==============================================================================
-
 

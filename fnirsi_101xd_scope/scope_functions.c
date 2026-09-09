@@ -4220,7 +4220,7 @@ void scope_display_channel_peak_trace(PCHANNELSETTINGS settings)//2
     settings->noftracepoints = 0;
 
     // Pre každý pixel na obrazovke
-    for (; xpos < disp_xend; xpos++)
+    for (; (xpos < disp_xend) && ((settings->noftracepoints + 1) < TRACE_POINT_BUFFER_SIZE); xpos++)
     {
         int32 sample_max = INT32_MIN;
         int32 sample_min = INT32_MAX;
@@ -4268,7 +4268,7 @@ void scope_display_channel_pro_trace(PCHANNELSETTINGS settings)//3
     int32 last_ymin = 0, last_ymax = 0;
     int first_pixel = 1;
 
-    for (; xpos < disp_xend; xpos++)
+    for (; (xpos < disp_xend) && ((settings->noftracepoints + 1) < TRACE_POINT_BUFFER_SIZE); xpos++)
     {
         int32 sample_max = INT32_MIN;
         int32 sample_min = INT32_MAX;
@@ -5650,6 +5650,27 @@ void scope_print_file_name(uint32 filenumber)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+static int32 scope_reset_thumbnail_file(void)
+{
+  int32 result;
+
+  viewavailableitems = 0;
+
+  f_close(&viewfp);
+
+  result = f_open(&viewfp, viewfilename, FA_CREATE_ALWAYS | FA_WRITE);
+
+  if(result == FR_OK)
+  {
+    result = f_write(&viewfp, &viewavailableitems, sizeof(viewavailableitems), 0);
+    f_close(&viewfp);
+  }
+
+  return(result);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
 int32 scope_load_thumbnail_file(void)
 {
   int32  result;
@@ -5755,6 +5776,26 @@ int32 scope_load_thumbnail_file(void)
     //Based on the number of available items load the rest of the data
     if(viewavailableitems)
     {
+      if(viewavailableitems > VIEW_MAX_ITEMS)
+      {
+        //Show a message stating that the thumbnail file is corrupt
+        scope_display_file_status_message(MESSAGE_THUMBNAIL_FILE_CORRUPT, 0);
+
+        result = scope_reset_thumbnail_file();
+
+        if(result != FR_OK)
+        {
+          //Show a message stating writing the file failed
+          scope_display_file_status_message(MESSAGE_FILE_WRITE_FAILED, 0);
+
+          //No sense to continue, so return with an error
+          return(-1);
+        }
+
+        //No items to be loaded any more so done
+        return(0);
+      }
+
       //Calculate the number of bytes to read for the file number list
       size = viewavailableitems * sizeof(uint16);
 
@@ -5764,14 +5805,7 @@ int32 scope_load_thumbnail_file(void)
         //Show a message stating that the thumbnail file is corrupt
         scope_display_file_status_message(MESSAGE_THUMBNAIL_FILE_CORRUPT, 0);
 
-        //Reset the number of available items
-        viewavailableitems = 0;
-
-        //Write the no thumbnails yet data
-        result = f_write(&viewfp, &viewavailableitems, sizeof(viewavailableitems), 0);
-
-        //Close the file
-        f_close(&viewfp);
+        result = scope_reset_thumbnail_file();
 
         if(result != FR_OK)
         {
@@ -5810,14 +5844,7 @@ int32 scope_load_thumbnail_file(void)
         //Show a message stating that the thumbnail file is corrupt
         scope_display_file_status_message(MESSAGE_THUMBNAIL_FILE_CORRUPT, 0);
 
-        //Reset the number of available items
-        viewavailableitems = 0;
-
-        //Write the no thumbnails yet data
-        result = f_write(&viewfp, &viewavailableitems, sizeof(viewavailableitems), 0);
-
-        //Close the file
-        f_close(&viewfp);
+        result = scope_reset_thumbnail_file();
 
         if(result != FR_OK)
         {
@@ -7035,8 +7062,18 @@ void scope_thumbnail_calculate_trace_data(int32 xstart, int32 ystart, int32 xend
   register int32  yacc;
   register int32  ystep;
 
+  if((xstart < 0) || (xstart >= THUMBNAIL_TRACE_DATA_SIZE) || (xend < 0) || (xend >= THUMBNAIL_TRACE_DATA_SIZE))
+    return;
+
   //Calculate delta x.
   dx = xend - xstart;
+
+  //Set the start and end points
+  thumbnailtracedata[xstart] = ystart;
+  thumbnailtracedata[xend]   = yend;
+
+  if(dx <= 0)
+    return;
 
   //Calculate the y segment length
   ystep = ((yend - ystart) << 16) / dx;
@@ -7044,12 +7081,8 @@ void scope_thumbnail_calculate_trace_data(int32 xstart, int32 ystart, int32 xend
   //Initialize the y accumulator for broken pixel accounting
   yacc = ystart << 16;
 
-  //Set the start and end points
-  thumbnailtracedata[xstart] = ystart;
-  thumbnailtracedata[xend]   = yend;
-
   //Check if there are points in between
-  if(dx > 2)
+  if(dx > 1)
   {
     //Handle the in between x positions
     for(x=xstart+1;x<xend;x++)
@@ -7060,7 +7093,7 @@ void scope_thumbnail_calculate_trace_data(int32 xstart, int32 ystart, int32 xend
       //Set it in the buffer
       thumbnailtracedata[x] = yacc >> 16;
     }
-  } else thumbnailtracedata[xstart+1] = yacc >> 16;
+  }
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -7698,8 +7731,33 @@ void scope_save_input_calibration_data(void)
     buffer[0] = checksum >> 16;
     buffer[1] = checksum;
 
-    //Write the data to its sector on the SD card
+//Write the data to its sector on the SD card
     sd_card_write(INPUT_CALIBRATION_SECTOR, 1, (uint8 *)buffer);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
+void scope_sanitize_fpga_sample_settings(void)
+{
+  if(fpgasettings.totalsamples > MAX_SAMPLE_BUFFER_SIZE)
+  {
+    fpgasettings.totalsamples = MAX_SAMPLE_BUFFER_SIZE;
+  }
+  else if(fpgasettings.totalsamples < FPGA_MIN_TOTAL_SAMPLES)
+  {
+    fpgasettings.totalsamples = FPGA_DEFAULT_TOTAL_SAMPLES;
+  }
+
+  if(fpgasettings.totalsamples & 1)
+  {
+    fpgasettings.totalsamples--;
+  }
+
+  if((fpgasettings.settriggerpoint < FPGA_MIN_TRIGGER_POINT) ||
+     (fpgasettings.settriggerpoint > (fpgasettings.totalsamples - FPGA_POST_TRIGGER_MARGIN)))
+  {
+    fpgasettings.settriggerpoint = fpgasettings.totalsamples / 2;
+  }
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -7707,7 +7765,9 @@ void scope_save_input_calibration_data(void)
 void scope_reset_config_data(void)
 {
   //uint32 index;
+#if !PORT_1014D
   uint32 *ptr = STARTUP_CONFIG_ADDRESS;     //for save and load boot menu settings
+#endif
   
   //Load a default configuration in case of settings in flash being corrupted
    
@@ -7838,8 +7898,8 @@ void scope_reset_config_data(void)
   fpgasettings.gen_phase        = 0;    //0                      
 
 
-  fpgasettings.totalsamples           = 3000; //Set max samples in FPGA       (1500*2)
-  fpgasettings.settriggerpoint        = 1500; //Set start triger point in FPGA (750*2)
+  fpgasettings.totalsamples           = FPGA_DEFAULT_TOTAL_SAMPLES; //Set max samples in FPGA       (1500*2)
+  fpgasettings.settriggerpoint        = FPGA_DEFAULT_TRIGGER_POINT; //Set start triger point in FPGA (750*2)
   fpgasettings.en_holdoff_trigger     = 0;    //0-holdoff disable
   fpgasettings.value_holdoff_trigger  = 1000; //1000 is 1sec
 
@@ -7859,8 +7919,8 @@ void scope_reset_config_data(void)
   
   
   //----------------------------------------------------------------------------
-  ptr[0] = 4;  //PECO + menu //value for default start firmware (0-pepco,1-fnirsi, 2-FEL, <3 skip menu)
 #if !PORT_1014D
+  ptr[0] = 4;  //PECO + menu //value for default start firmware (0-pepco,1-fnirsi, 2-FEL, <3 skip menu)
   //SAVE the display configuration sector from DRAM to SDcart   //save boot menu and default start
   //On the 1014D chain nothing populates the DRAM staging block and the boot loader ignores the
   //sector, so writing it would only put garbage there (BOOT_NOTES.md)
@@ -8280,18 +8340,11 @@ void scope_restore_config_data(void)
   fpgasettings.gen_phase        = *ptr++; 
 
   fpgasettings.totalsamples           = *ptr++;
-
-  //Clamp to the trace buffer capacity: the CDC 'f' debug command used to let an
-  //oversized value into the config sector, turning every acquisition into a buffer
-  //overrun that persisted across power cycles (REVIEW-2026-08-21)
-  if(fpgasettings.totalsamples > MAX_SAMPLE_BUFFER_SIZE)
-  {
-    fpgasettings.totalsamples = MAX_SAMPLE_BUFFER_SIZE;
-  }
-
   fpgasettings.settriggerpoint        = *ptr++;
   fpgasettings.en_holdoff_trigger     = *ptr++;
   fpgasettings.value_holdoff_trigger  = *ptr++;
+
+  scope_sanitize_fpga_sample_settings();
   
   //---------------------------------------------------------------------------- 
   }

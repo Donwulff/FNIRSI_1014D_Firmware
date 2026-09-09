@@ -3457,6 +3457,27 @@ void ui_print_file_name(uint32 filenumber)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+static int32 ui_reset_thumbnail_file(void)
+{
+  int32 result;
+
+  viewavailableitems = 0;
+
+  f_close(&viewfp);
+
+  result = f_open(&viewfp, viewfilename, FA_CREATE_ALWAYS | FA_WRITE);
+
+  if(result == FR_OK)
+  {
+    result = f_write(&viewfp, &viewavailableitems, sizeof(viewavailableitems), 0);
+    f_close(&viewfp);
+  }
+
+  return(result);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
 int32 ui_load_thumbnail_file(void)
 {
   int32  result;
@@ -3562,6 +3583,26 @@ int32 ui_load_thumbnail_file(void)
     //Based on the number of available items load the rest of the data
     if(viewavailableitems)
     {
+      if(viewavailableitems > VIEW_MAX_ITEMS)
+      {
+        //Show a message stating that the thumbnail file is corrupt
+        ui_display_file_status_message(MESSAGE_THUMBNAIL_FILE_CORRUPT, 0);
+
+        result = ui_reset_thumbnail_file();
+
+        if(result != FR_OK)
+        {
+          //Show a message stating writing the file failed
+          ui_display_file_status_message(MESSAGE_FILE_WRITE_FAILED, 0);
+
+          //No sense to continue, so return with an error
+          return(-1);
+        }
+
+        //No items to be loaded any more so done
+        return(0);
+      }
+
       //Calculate the number of bytes to read for the file number list
       size = viewavailableitems * sizeof(uint16);
 
@@ -3571,14 +3612,7 @@ int32 ui_load_thumbnail_file(void)
         //Show a message stating that the thumbnail file is corrupt
         ui_display_file_status_message(MESSAGE_THUMBNAIL_FILE_CORRUPT, 0);
 
-        //Reset the number of available items
-        viewavailableitems = 0;
-
-        //Write the no thumbnails yet data
-        result = f_write(&viewfp, &viewavailableitems, sizeof(viewavailableitems), 0);
-
-        //Close the file
-        f_close(&viewfp);
+        result = ui_reset_thumbnail_file();
 
         if(result != FR_OK)
         {
@@ -3617,14 +3651,7 @@ int32 ui_load_thumbnail_file(void)
         //Show a message stating that the thumbnail file is corrupt
         ui_display_file_status_message(MESSAGE_THUMBNAIL_FILE_CORRUPT, 0);
 
-        //Reset the number of available items
-        viewavailableitems = 0;
-
-        //Write the no thumbnails yet data
-        result = f_write(&viewfp, &viewavailableitems, sizeof(viewavailableitems), 0);
-
-        //Close the file
-        f_close(&viewfp);
+        result = ui_reset_thumbnail_file();
 
         if(result != FR_OK)
         {
@@ -4827,18 +4854,24 @@ void ui_thumbnail_calculate_trace_data(int32 xstart, int32 ystart, int32 xend, i
   register int32  yacc;
   register int32  ystep;
 
+  if((xstart < 0) || (xstart >= THUMBNAIL_TRACE_DATA_SIZE) || (xend < 0) || (xend >= THUMBNAIL_TRACE_DATA_SIZE))
+    return;
+
   //Calculate delta x.
   dx = xend - xstart;
+
+  //Set the start and end points
+  thumbnailtracedata[xstart] = ystart;
+  thumbnailtracedata[xend]   = yend;
+
+  if(dx <= 0)
+    return;
 
   //Calculate the y segment length
   ystep = ((yend - ystart) << 16) / dx;
 
   //Initialize the y accumulator for broken pixel accounting
   yacc = ystart << 16;
-
-  //Set the start and end points
-  thumbnailtracedata[xstart] = ystart;
-  thumbnailtracedata[xend]   = yend;
 
   //Check if there are points in between
   if(dx > 1)
