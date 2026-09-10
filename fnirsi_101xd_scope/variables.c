@@ -151,6 +151,7 @@ uint8 keymenuopen;                  //flag for open the keyboard menu
 
 uint8 calibrationfail = 0;          //flag calibration failed ,1-failed
 uint8 triggerlong = 0;              //flag signal is triggered
+uint8 display_triggered = 0;        //sweep Waiting/Triggered latch (Auto stays set)
 uint8 trigger50 = 0;                //flag for channel settings 50% button 
 uint8 restore = 0;                  //flag restore default data ok
 
@@ -175,8 +176,9 @@ uint8 math_sample = 0;
 //Display data
 //----------------------------------------------------------------------------------------------------------------------------------
 
-//This first buffer is defined as 32 bits to be able to write it to file
-uint32 maindisplaybuffer[SCREEN_SIZE / 2];
+//Visible DEBE scanout buffer. Lives in its own 1 MB NCNB section (see mmu_map.h /
+//fnirsi_101xd.ld) so write-back DRAM caching cannot serve stale pixels to the panel.
+uint32 maindisplaybuffer[SCREEN_SIZE / 2] __attribute__((section(".framebuffer")));
 
 uint16 displaybuffer1[SCREEN_SIZE]; //Main menu, Channel menu ch1 and ch2, ACQ menu, Trigger menu
 uint16 displaybuffer2[SCREEN_SIZE]; //System settings menu, REF menu, MATH menu

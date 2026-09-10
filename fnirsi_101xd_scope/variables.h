@@ -1085,6 +1085,7 @@ extern uint8 keymenuopen;
 
 extern uint8 calibrationfail;
 extern uint8 triggerlong;
+extern uint8 display_triggered;
 extern uint8 trigger50;
 extern uint8 restore;
 
@@ -1094,6 +1095,11 @@ extern uint8 reload_cal_data;
 
 extern uint8 USB_CH340; 
 extern uint8 dev_mode;
+
+#if PORT_1014D
+void speed_note_capture(void);
+void speed_note_t05_ms(uint32 ms);
+#endif
 
 /*
  extern uint8 ref1_sample;

@@ -117,7 +117,7 @@ Rationale: valuable Atlan4 changes (acquisition, math, FPGA) are in shared files
 - **`typedef char int8` is unsigned on ARM** — ARM GCC defaults `char` to unsigned (`-funsigned-char`). `typedef char int8` in `types.h` means `int8` is actually `uint8`. `int8 x = -1` stores `0xFF` = 255, and `menuitem -= x` zero-extends to 255 instead of sign-extending to -1. Fix: `typedef signed char int8`. Symptom: DOWN/SUB in menu navigation always jumps to the last item. Same code works on x86 (where `char` defaults to signed).
 - **Integer promotion masks `int8` signedness for add/sub/mul** — In `ref_and_math.c:147`, `int8 a = A[i]` copies `uint8` ADC data (0-255) into `int8`. Despite signedness change, add/sub/mul produce identical final `uint8` results because both operands promote to `int32` and truncation back to `uint8` is modulo-256. Only integer division (`mathmode==4`) differs. The ADC samples are mid-scale at 128 (`memset(..., 128, ...)`) — treat as centered-around-zero in signed math.
 - **Key code values are identical — EXCEPT NAV_LEFT/NAV_RIGHT** — `GD_KEY_*` in `uart.h` and `UIC_BUTTON_*` in `statemachine.h` share numeric values (sequential 0x01–0x32) except GD says 0x08=LEFT/0x0C=RIGHT while UIC says 8=RIGHT/12=LEFT (PORT_AUDIT.md F5). No translation layer; the UART raw byte passes directly to the state machine switch/case, so behavior follows the UIC (pecostm32) mapping. The GD_* table is unreferenced dead code — verify nav direction on hardware, then reconcile.
-- **UART polling is blocking** — `uart1_receive_data()` sends 0xFF then busy-waits for the DR bit. Every call blocks until the key controller responds. This gates the main loop frame rate on UART response time.
+- **UART polling is non-blocking** — `uart1_receive_data()` writes `0xFF` when TEMT is set and returns 0 until DR (or a 20 ms timeout). It will not send a second poll while a reply is outstanding. `uart1_wait_for_user_input()` still loops until a non-zero key (USB/calibration screens). Roll wait in `test.c` polls the same path so keys abort the per-sample delay (ROADMAP 4/32). Hardware-verify pending. Do not add a UART IRQ — `start.s` resets the IRQ stack on every entry.
 - **Memory layout adjacency in `variables.c`** — the whole 1014D UI-state block (`speedvalue`, `setvalue`, `navigationstate`, `fileviewstate`, …, `menuitem` — variables.c:19–29 as of 2026-08-21; the block has grown since first documented) is declared directly after `globaldisplaytext[50]`. Any `globaldisplaytext` buffer overflow silently corrupts these state variables. String buffer overruns in any print/format function using this buffer can cause unpredictable menu or state machine behavior.
 - **Working tree may diverge from HEAD** — `git diff origin/main` includes BOTH committed and uncommitted changes. Uncommitted worktree edits (e.g., `#ifndef PORT_1014D` guards in DS3231.c) may exist that are not in any commit. Always check `git status` and `git diff HEAD` to distinguish committed vs worktree-only changes before acting.
 
@@ -177,11 +177,13 @@ bug once.
 
 **`ui_display_trigger_settings()` draws both top and bottom info** — When called from within `scope_display_trace_data()` (which targets `displaybuffertmp`), the top portion at y=6 is drawn to the offscreen buffer but never reaches the screen (copy rect starts at y=48). This is wasted work but harmless. Only the bottom portion at y=465 is inside the copy rect and reaches the screen.
 
-**CPU-infrastructure facts (2026-08-21 follow-up audit)** — (1) The D-cache is NOT actually
-on: `main()` sets the CP15 C bit but the MMU is never enabled, and on ARM926EJ-S data
-cacheability comes from the page tables — every data access runs uncached today (the I-cache
-does work). Don't "fix" this casually: the FPGA Port-E bus, all `0x01Cxxxxx`/`0x01Exxxxx`
-peripherals, and the DEBE-scanned framebuffer must stay uncacheable (ROADMAP 31). (2) Never
+**CPU-infrastructure facts (2026-08-21 follow-up audit; MMU landed 2026-09-04, hw-verify pending)** —
+(1) `mmu_setup()` identity-maps 1 MB sections so the D-cache C bit actually applies: DRAM
+`0x80000000–0x82000000` write-back except `maindisplaybuffer` at `0x81D00000` (own 1 MB NCNB
+section; DEBE scans it), SRAM/vectors and `0x01C00000–0x02000000` NCNB (FPGA Port E, INTC, SD,
+USB FIFO, TCON/DEBE). Do not map those device windows cacheable. FEL calls `mmu_off_for_brom()`
+(clean+invalidate D-cache, drop C and M bits) before `0xFFFF0020`. Map policy is `mmu_map.c`;
+host tests in `tools/test_mmu_map.c`. (2) Never
 re-enable IRQs inside an interrupt handler — `start.s` resets the IRQ stack pointer on every
 entry, so nesting corrupts the live frame. (3) USB mass-storage file I/O runs entirely in IRQ
 context with IRQs masked (see the invariant header atop `mass_storage_class.c`) — never add

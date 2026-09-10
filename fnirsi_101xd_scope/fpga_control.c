@@ -5,6 +5,9 @@
 #include "timer.h"
 #include "variables.h"
 #include "port_config.h"
+#if PORT_1014D
+#include "uart.h"
+#endif
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
@@ -637,9 +640,29 @@ void fpga_arm_long_timebase_cycle(void)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+#if PORT_1014D
+static uint8 fpga_abort_on_key;
+#endif
+
+void fpga_conversion_abort_on_key(uint8 enable)
+{
+#if PORT_1014D
+  fpga_abort_on_key = enable;
+#endif
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
 void fpga_do_conversion(void)
 { 
   scopesettings.conversion_done = 0;    //flag for conversion, 0-start
+#if PORT_1014D
+  //Auto never waits — keep the banner latched. Normal/Single wait from arm to edge.
+  if(scopesettings.triggermode)
+  {
+    display_triggered = 0;
+  }
+#endif
   
   //Check if sampling with trigger system enabled
   if(scopesettings.samplemode == 1)
@@ -689,25 +712,53 @@ void fpga_do_conversion(void)
   //Wait for the flag to become 1 (bounded: on the 1014D FPGA this can never assert if the sample
   //clock/handshake differs, which would hang the whole main loop here before it reaches input
   //handling. Time out and continue so the scope stays responsive instead of freezing.)
+  //1014D acquire-only: UART poll after 20 ms, abort the arm. Do not call sm_handle here —
+  //that writes FPGA commands and the next fpga_read_byte is then not the 0x05 flag.
   {
     uint32 fpga_ready_timeout = 0;
+#if PORT_1014D
+    uint8 aborted = 0;
+    uint32 t0 = timer0_get_ticks();
+#endif
     while((fpga_read_byte() & 1) == 0)
     {
       if(++fpga_ready_timeout > 2000000) break;
+#if PORT_1014D
+      if(fpga_abort_on_key && ((timer0_get_ticks() - t0) > 20) && uart1_get_user_input())
+      {
+        scopesettings.display_data_done = 1;
+        aborted = 1;
+        break;
+      }
+#endif
     }
-  }
-  
-  //Test again to make sure it was no glitch. pecostm32 double-reads the reset-ready flag here
-  //("make sure it was no glitch") and Atlan4 had commented it out. With the 0x28 mode-select now
-  //engaging the proper fast dual-ADC capture, a premature ready read surfaces as occasional noise
-  //peaks (was masked by the sawtooth before F25). Restored -- bounded like the first wait so we
-  //keep Atlan4's anti-hang timeout instead of pecostm32's unbounded spin. (PORT_AUDIT.md F26)
-  {
-    uint32 fpga_ready_timeout = 0;
-    while((fpga_read_byte() & 1) == 0)
+
+#if PORT_1014D
+    if(!aborted)
+#endif
     {
-      if(++fpga_ready_timeout > 2000000) break;
+      //Test again to make sure it was no glitch. pecostm32 double-reads the reset-ready flag here
+      //("make sure it was no glitch") and Atlan4 had commented it out. With the 0x28 mode-select now
+      //engaging the proper fast dual-ADC capture, a premature ready read surfaces as occasional noise
+      //peaks (was masked by the sawtooth before F25). Restored -- bounded like the first wait so we
+      //keep Atlan4's anti-hang timeout instead of pecostm32's unbounded spin. (PORT_AUDIT.md F26)
+      fpga_ready_timeout = 0;
+      while((fpga_read_byte() & 1) == 0)
+      {
+        if(++fpga_ready_timeout > 2000000) break;
+#if PORT_1014D
+        if(fpga_abort_on_key && ((timer0_get_ticks() - t0) > 20) && uart1_get_user_input())
+        {
+          scopesettings.display_data_done = 1;
+          aborted = 1;
+          break;
+        }
+#endif
+      }
     }
+#if PORT_1014D
+    speed_note_t05_ms(timer0_get_ticks() - t0);
+#endif
   }
 
   //posielat ked je sytem v resete, aby neprepisal udaje zachodu

@@ -84,6 +84,7 @@ void   fpga_set_trigger_level(void);
 void   fpga_set_trigger_mode(void);
 
 void   fpga_do_conversion(void);
+void   fpga_conversion_abort_on_key(uint8 enable);
 uint8  fpga_done_conversion(void);
 
 uint16 fpga_prepare_for_transfer(void);

@@ -130,6 +130,11 @@ uint8 uart1_get_user_input(void);
 //Waits for user input and sets the received command in the lastreceivedcommand variable
 void uart1_wait_for_user_input(void);
 
+//After a reply, uart1_receive_data() already sent the next 0xFF. Spin up to
+//timeout_ms for that reply. Returns the byte (and sets toprocesscommand); 0
+//means idle or timeout so the caller should stop draining.
+uint8 uart1_collect_next_command(uint32 timeout_ms);
+
 
 //----------------------------------------------------------------------------------------------------------------------------------
 

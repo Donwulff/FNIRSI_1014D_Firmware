@@ -15,6 +15,18 @@
 #if PORT_1014D
 //----------------------------------------------------------------------------------------------------------------------------------
 
+static uint32 speed_ui_count;
+static uint32 speed_cap_count;
+static uint32 speed_window_t0;
+static uint32 speed_ui_hz;
+static uint32 speed_cap_hz;
+static uint32 speed_t05_ms;
+static uint32 ui_last_frame_tick;
+
+#define UI_FRAME_MS  16
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
 void ui_setup_display_lib(void)
 {
   //Use the main buffer for displaying the oscilloscope screen
@@ -420,6 +432,17 @@ void ui_display_run_stop_text(void)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+uint32 ui_trigger_banner_state(void)
+{
+  //0 = Waiting, 1 = Triggered. Sweep uses display_triggered (latched at
+  //consume, cleared on arm only if not Auto). Roll uses triggerlong.
+  if(scopesettings.long_mode)
+  {
+    return triggerlong ? 1 : 0;
+  }
+  return display_triggered;
+}
+
 void ui_display_waiting_triggered_text(uint32 state)
 {
   const uint8 *icon;
@@ -442,6 +465,14 @@ void ui_display_waiting_triggered_text(uint32 state)
 
   //Display the text icon with infill of the background since the other text icon needs to be overwritten
   display_copy_icon_use_colors(icon, 652, 464, 54, 14);
+}
+
+void ui_draw_roll_chrome(void)
+{
+  display_set_screen_buffer((uint16 *)maindisplaybuffer);
+  ui_draw_pointers();
+  ui_display_trigger_settings();
+  ui_display_waiting_triggered_text(ui_trigger_banner_state());
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -575,6 +606,10 @@ void ui_draw_pointers(void)
   //Draw trigger position and level pointer when in normal display mode
   if(scopesettings.tracedisplaymode == DISPLAY_MODE_NORMAL)
   {
+    //Roll has no H marker: xpos is the write head, not a trigger position, and
+    //redrawing H every 16 ms with no erase left a trail across the crawl.
+    if(!scopesettings.long_mode)
+    {
     //x position for the trigger position pointer
     position = scopesettings.triggerhorizontalposition;
     
@@ -595,6 +630,7 @@ void ui_draw_pointers(void)
     {
       //When the pointer is outside the right of the window show it to the user with an arrow pointing right
       ui_display_trigger_position_arrow(1);
+    }
     }
     
     //y position for the trigger level pointer
@@ -5572,6 +5608,57 @@ void ui_redraw_active_menu(void)
       ui_display_clock_menu(CLOCK_MENU_XPOS, CLOCK_MENU_YPOS);
       break;
   }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
+uint8 ui_display_frame_due(void)
+{
+  uint32 now = timer0_get_ticks();
+
+  if((now - ui_last_frame_tick) < UI_FRAME_MS)
+    return 0;
+
+  ui_last_frame_tick = now;
+  return 1;
+}
+
+void speed_note_capture(void)
+{
+  speed_cap_count++;
+}
+
+void speed_note_t05_ms(uint32 ms)
+{
+  speed_t05_ms = ms;
+}
+
+void ui_draw_speed_overlay(void)
+{
+  uint32 now = timer0_get_ticks();
+
+  speed_ui_count++;
+  if((now - speed_window_t0) >= 1000)
+  {
+    speed_ui_hz = speed_ui_count;
+    speed_cap_hz = speed_cap_count;
+    speed_ui_count = 0;
+    speed_cap_count = 0;
+    speed_window_t0 = now;
+  }
+
+  //Bottom bar gap between DIV and Waiting — off the grid.
+  display_set_screen_buffer((uint16 *)maindisplaybuffer);
+  display_set_font(&font_1);
+  display_set_fg_color(COLOR_BLACK);
+  display_fill_rect(230, 465, 210, 14);
+  display_set_fg_color(COLOR_GREEN);
+  display_text(232, 465, "UI");
+  display_decimal(250, 465, speed_ui_hz);
+  display_text(290, 465, "CAP");
+  display_decimal(318, 465, speed_cap_hz);
+  display_text(358, 465, "t05");
+  display_decimal(386, 465, speed_t05_ms);
 }
 
 #endif // PORT_1014D
