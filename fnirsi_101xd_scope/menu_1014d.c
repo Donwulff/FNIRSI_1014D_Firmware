@@ -26,6 +26,42 @@ void ui_setup_display_lib(void)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+void ui_show_startup_screen(void)
+{
+  if(load_picture("scope.bmp") != VIEW_BITMAP_NOT_FOUND)
+    return;
+
+  display_set_screen_buffer(displaybuffertmp);
+  display_set_fg_color(COLOR_BLACK);
+  display_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+  display_set_fg_color(COLOR_WHITE);
+  display_set_font(&font_5);
+  display_text(100, 110, "FNIRSI 1014D");
+  display_set_font(&font_3);
+  display_text(100, 156, "Open firmware / Atlan4-base port");
+  display_text(100, 182, VERSION_STRING);
+
+  display_set_fg_color(CHANNEL1_COLOR);
+  display_fill_rect(100, 220, 300, 2);
+  display_set_fg_color(CHANNEL2_COLOR);
+  display_fill_rect(400, 220, 300, 2);
+
+  display_set_fg_color(COLOR_WHITE);
+  display_text(100, 250, "pecostm32 - reverse engineering and open firmware");
+  display_text(100, 276, "Atlan4 - extended 1013D firmware");
+  display_text(100, 302, "Donwulff - 1014D port and integration");
+  display_text(100, 342, "With contributions from the FNIRSI / EEVblog community");
+  display_text(100, 386, "Community firmware - not an official FNIRSI release");
+
+  display_set_source_buffer(displaybuffertmp);
+  display_set_screen_buffer((uint16 *)maindisplaybuffer);
+  display_copy_rect_to_screen(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+  timer0_delay(1500);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------------
+
 void ui_setup_main_screen(void)
 {
   //Set black color for background

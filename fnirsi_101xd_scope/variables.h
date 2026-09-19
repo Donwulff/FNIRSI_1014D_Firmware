@@ -93,6 +93,7 @@
 
 #define VIEW_BITMAP_LOAD_OK               0
 #define VIEW_BITMAP_LOAD_ERROR            1
+#define VIEW_BITMAP_NOT_FOUND             2
 
 #define VIEW_CONFIRM_DELETE_NO            1
 #define VIEW_CONFIRM_DELETE_YES           2

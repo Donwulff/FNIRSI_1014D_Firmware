@@ -7,6 +7,108 @@ selected by a single switch (`PORT_1014D` in `fnirsi_101xd_scope/port_config.h`,
 = 1014D). GPLv3, no warranty — flashing replacement firmware is at your own risk (the stock
 firmware stays in SPI flash as a fallback; see `BOOT_NOTES.md`).
 
+## TL;DR: just get me started without bricking it
+
+**For a 1014D with its stock FPGA. Experimental firmware, not a risk-free upgrade.**
+The 1013D build has not been hardware-tested here. Leave the FPGA and SPI flash alone;
+this procedure installs to SD and preserves the stock firmware in SPI flash.
+You do **not** need NetBeans, the reference trees, an FPGA build, or a splash image.
+
+- Build `fnirsi_101xd_scope/` on `atlan4-base` with `PORT_1014D 1`.
+- Back up the **whole SD card**, then write `fnirsi_1014d.bin` at **8 KiB**, not byte zero.
+- Hold a key at power-on for recovery: **F2 = stock firmware**, **F3 = FEL**.
+- Already installed? Use FEL to try `fnirsi_1014d_scope.bin` in RAM before installing it.
+
+### First install (Linux)
+
+1. **Build only the active project.** Use x86-64 Linux (the bundled packaging tools are
+   Linux x86-64 binaries), GNU Make, and `arm-none-eabi-gcc` / ARM binutils on your PATH.
+   From a fresh checkout:
+
+   ```sh
+   git clone --branch atlan4-base https://github.com/Donwulff/FNIRSI_1014D_Firmware.git
+   cd FNIRSI_1014D_Firmware/fnirsi_101xd_scope
+   make
+   ```
+
+   Check `port_config.h` has `#define PORT_1014D 1`. The build must finish successfully
+   and print **`v1.00o5-1014D`** and
+   **`BOOTLOADER: bootloader_1014d_base.bin at offset 0x8000`**. Stop if either differs.
+   Do not build any of the `fnirsi_1013d_startup*` or other loader directories.
+
+2. **Back up the whole SD card before writing anything.** Connect the scope's USB data
+   port and enable USB disk mode from its menu, or use a card reader. Identify the disk
+   with `lsblk -o NAME,SIZE,MODEL,TRAN,FSTYPE,MOUNTPOINTS,START`; verify by disconnecting
+   and reconnecting it. `/dev/sdX` below is a placeholder for the **whole scope SD disk**,
+   not a partition and never your computer's system disk. Unmount **all** its mounted
+   partitions first (for example, `sudo umount /dev/sdX1`), then:
+
+   ```sh
+   sudo dd if=/dev/sdX of="$HOME/scope-sd-backup.bin" bs=4M status=progress
+   ```
+
+   Use a new backup filename, not one that overwrites an earlier backup. Keep it somewhere
+   safe, outside this repository. It preserves the partition table, files, firmware
+   and raw settings/calibration sectors; copying only
+   the visible files does not. Check that `dd` succeeded and copied the full disk size.
+   Inspect `sudo fdisk -l /dev/sdX`: the card must have a FAT32 partition and **all
+   partitions must start at or beyond 1 MiB** (sector 2048 for 512-byte sectors). If the
+   layout differs or you cannot identify the disk confidently, **stop before writing**.
+
+3. **Install the packed SD image, not the scope-only binary.** From the project directory
+   above, with the card's partitions still unmounted:
+
+   ```sh
+   sudo dd if=dist/Debug/GNU_ARM-Linux/fnirsi_1014d.bin of=/dev/sdX bs=1024 seek=8 conv=fsync status=progress
+   sync
+   ```
+
+   This writes raw sectors at **8 KiB**, not a file on the FAT partition. Do not use a
+   disk-image writer that starts at byte zero. Wait for successful completion, unmount
+   again if the host remounted the card, then power-cycle the scope. Expect the scope
+   screen after a brief splash; `scope.bmp` is optional.
+
+4. **Know the way back.** With this 1014D loader installed, hold an extra front-panel key
+   while powering on to open its menu: **F1** starts this SD firmware (still labelled
+   "PECO"), **F2** starts the original SPI-flash firmware, **F3** enters FEL. If the loader
+   itself no longer runs, restore the full SD backup using a card reader. See
+   [Boot and recovery notes](BOOT_NOTES.md) before trying other recovery methods.
+
+### Try an update in RAM (FEL)
+
+**Already running this port? Try a new build in RAM first.** Select *Factory settings >
+FEL firmware update*, or use the installed loader's F3 entry, then run with `sunxi-fel`
+from `sunxi-tools` available on the host:
+
+```sh
+sudo sunxi-fel -p write 0x7FFFFFE0 dist/Debug/GNU_ARM-Linux/fnirsi_1014d_scope.bin exe 0x80000000
+```
+
+FEL loading this way does not replace the installed firmware; a power cycle returns to
+the SD build. The running firmware can still save settings to SD, so keep the backup.
+This assumes DRAM was initialized by the running scope/loader; it is **not** a first-time
+installation recipe for a stock scope or a device entering FEL straight from reset.
+
+| Built file | Use |
+|---|---|
+| `fnirsi_1014d.bin` | Packed SD image, written at 8 KiB |
+| `fnirsi_1014d_scope.bin` | Scope program only, for the FEL command above |
+| `fnirsi_101xd*.bin` | Identical variant-neutral copies; prefer the model-labelled files |
+
+### Startup splash
+
+On the 1014D, no `scope.bmp` means a built-in text splash identifying the Atlan4-base port
+and crediting pecostm32, Atlan4, Donwulff and the wider FNIRSI/EEVblog community. No extra
+files are required. To replace an old custom splash with these credits, remove or rename
+`scope.bmp` at the SD card's FAT root. The fallback is drawn by the firmware, not stored
+as an image in this repository. The separate loader and its PECO-labelled menu are unchanged.
+
+An optional `scope.bmp` still overrides the built-in splash. It must match the scope's
+own screenshot format exactly: 800x480, top-down RGB565 BMP with the 70-byte header defined
+in `variables.c` (`bmpheader`); an arbitrary BMP export may not match. A missing splash is
+normal; an unreadable or malformed one still produces a file error. **`SD ERROR` is not
+a missing splash**: it means the FAT filesystem could not be mounted.
+
 ## Naming: "101xd" = the 1013D/1014D family
 
 This repository is a GitHub fork of `pecostm32/FNIRSI_1013D_Firmware`, renamed — and for a

@@ -190,8 +190,12 @@ int main(void)
   //Set screen brightness
   fpga_set_translated_brightness();
   
-  //load picture startup logo
+  //The 1014D has built-in credits when the optional SD splash is absent.
+#if PORT_1014D
+  ui_show_startup_screen();
+#else
   load_picture("scope.bmp");
+#endif
   //if (!dev_mode) timer0_delay(3000);//2000
 
 #if PORT_A_KEYDEBUG

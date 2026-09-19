@@ -116,6 +116,7 @@
 //----------------------------------------------------------------------------------------------------------------------------------
 
 void ui_setup_display_lib(void);
+void ui_show_startup_screen(void);
 
 void ui_setup_main_screen(void);
 

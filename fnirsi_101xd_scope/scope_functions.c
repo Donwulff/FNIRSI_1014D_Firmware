@@ -6416,20 +6416,32 @@ int32 scope_load_bitmap_data(void)
 int32 load_picture(const char* filename)
 {
   uint32 result;
-  //uint32 x = 300;
-  //display_set_font(&font_2);
+  uint32 namelength;
+  UINT bytesread;
 
-  //Set the name in the global buffer for message display
-  //strcpy(viewfilename, viewthumbnaildata[viewcurrentindex].filename);
+  //File-status messages must identify the splash, not a previous view item.
+  namelength = strlen(filename);
+  if(namelength >= sizeof(viewfilename))
+    namelength = sizeof(viewfilename) - 1;
+  memcpy(viewfilename, filename, namelength);
+  viewfilename[namelength] = 0;
 
   //Try to open the file for reading
   result = f_open(&viewfp, filename, FA_READ);
+
+#if PORT_1014D
+  //Only absence is optional; media and filesystem failures remain visible.
+  if(result == FR_NO_FILE)
+    return(VIEW_BITMAP_NOT_FOUND);
+#endif
 
   //Check if file opened ok
   if(result == FR_OK)
   {
     //Read the bitmap header to verify if the bitmap can be displayed
-    result = f_read(&viewfp, viewbitmapheader, PICTURE_HEADER_SIZE, 0);
+    result = f_read(&viewfp, viewbitmapheader, PICTURE_HEADER_SIZE, &bytesread);
+    if((result == FR_OK) && (bytesread != PICTURE_HEADER_SIZE))
+      result = FR_INT_ERR;
 
     //Check if still ok to proceed
     if(result == FR_OK)
@@ -6438,7 +6450,9 @@ int32 load_picture(const char* filename)
       if(memcmp(viewbitmapheader, bmpheader, PICTURE_HEADER_SIZE) == 0)
       {
         //Load the bitmap data directly onto the screen
-        result = f_read(&viewfp, (uint8 *)maindisplaybuffer, PICTURE_DATA_SIZE, 0);
+        result = f_read(&viewfp, (uint8 *)maindisplaybuffer, PICTURE_DATA_SIZE, &bytesread);
+        if((result == FR_OK) && (bytesread != PICTURE_DATA_SIZE))
+          result = FR_INT_ERR;
       }
       else
       {
