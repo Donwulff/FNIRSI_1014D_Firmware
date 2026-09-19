@@ -1591,8 +1591,8 @@ void draw_vw_character(uint16 character)
         pixel++;
         ptr++;
 
-        //Check if pixel on multiple of 8 for next byte select
-        if((pixel & 0x07) == 0)
+        //Fetch another byte only if this row still has pixels to draw.
+        if(((pixel & 0x07) == 0) && (pixel < metrics->pixels))
         {
           //Point to the next byte
           idx++;
