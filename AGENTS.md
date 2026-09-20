@@ -108,7 +108,8 @@ Rationale: valuable Atlan4 changes (acquisition, math, FPGA) are in shared files
 - **`strcpy` in this tree is NOT ISO** — the linked implementation is the C function in `scope_functions.c` (returns a pointer **at** the copied terminator; both Atlan4 and the imported UI chain `buffer = strcpy(buffer, …)` on that). `strcpy.s` exists but is **never compiled** (not in the object list) — don't "fix" it and don't add it to the build. CFLAGS carry `-fno-builtin-strcpy` so GCC can't fold calls to ISO dst-return semantics.
 - **Bootloader:** `bootloader_base.bin` (1013D, offset 0x5BC00) and `bootloader_1014d_base.bin` (1014D, offset 0x8000) are committed binaries selected automatically by Makefile from `port_config.h`. The 1014D bootloader is built from `FNIRSI_1014D_Firmware/fnirsi_1014d_startup/`.
 - **GCC 14+ `-fcommon`:** Required in `nbproject/Makefile-Debug.mk` CFLAGS to fix `multiple definition of calibrationsettings`.
-- **No automated tests.** Makefile `test`/`build-tests` targets are empty NetBeans stubs.
+- **Host regressions:** `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v` from the repo root (Python 3, host GCC, ARM GCC). Selected actual firmware functions run with hardware mocks and UBSan; these do not replace bench tests. Makefile `test`/`build-tests` remain empty NetBeans stubs.
+- **1014D SD layout (2026-09-20):** settings/calibration now use sectors 2047/2046, outside the growing app at sector 80. All MBR partitions must start at sector 2048 or later. Before installing over an older port, back up the whole card and run the new scope via loader F3/FEL to migrate valid legacy sectors 709/708. The packager rejects overlap; the 1013D sector layout stays unchanged. See BOOT_NOTES.md.
 - **Ignore `compile.sh`, `burn.sh`, `debug.sh`** — stale STM32/OpenOCD leftovers.
 - **`Release` config** targets host GNU/Linux, not ARM — not used.
 - **`(void)x` casts are inconsistent with codebase style** — CFLAGS in `nbproject/Makefile-Debug.mk` do NOT include `-Wunused-parameter`, so `(void)x` casts to suppress unused-parameter/variable warnings are unnecessary noise. The original code never used them. Their presence is a telltale AI-generated-slop marker. Remove them.
@@ -141,6 +142,11 @@ Set `PORT_A_KEYDEBUG 1` in `port_config.h` for:
 - Per-frame heartbeat/FPGA-ver/key-code overlay in right column
 
 ## Display architecture (double-buffering)
+
+**1014D roll path (2026-09-20):** `scope_get_long_timebase_data()` only samples, with a
+nonblocking timer. `scope_display_long_trace_data()` rebuilds the current sweep into
+scratch, composites the same overlays, and copies the P14 trace rectangle. File views
+suppress roll sampling and rendering. The 1013D's original roll path is unchanged.
 
 Two framebuffers, both 768000 bytes (800×480×2):
 - `maindisplaybuffer` — `uint32[SCREEN_SIZE/2]`, cast to `uint16*` for pixel access. The visible framebuffer read by the LCD controller.

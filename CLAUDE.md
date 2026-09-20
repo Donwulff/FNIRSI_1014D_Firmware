@@ -126,6 +126,8 @@ clobbering — but the trees remain build-nothing-here provenance references).
 - **`BOOT_NOTES.md`** — boot chain, SD sector map (16/80/708/709/710), loader contracts
   (the 1014D loader has **no persistent boot byte** — its menu is key-hold at power-on),
   recovery paths, bootloader migration assessment.
+  Since 2026-09-20 the 1014D uses calibration/settings sectors 2046/2047 instead of
+  708/709; existing installations need the documented FEL-first migration.
 - **`ROADMAP.md`** — proposed improvements/refactors/features (dated suggestions).
 - **`AGENTS.md`** — opencode's context file for the same tree: module layout, display
   double-buffering architecture, hard-earned gotchas (guard placement, `int8` signedness,
@@ -164,8 +166,10 @@ Gotchas:
   sources" advice was false.)
 - CFLAGS (in `nbproject/Makefile-Debug.mk`) carry `-fcommon` and
   `-Wno-error=implicit-*`/`int-conversion` for GCC 14, and are `-O2` (not `-O3`, not `-Og`).
-- **No automated tests** (`test` targets are empty NetBeans stubs). Verification is
-  build + on-device.
+- Host regressions: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v`
+  from the repo root (Python 3, host GCC and ARM GCC required). These compile actual
+  selected firmware functions with hardware mocks and UBSan; on-device verification
+  is still necessary. Makefile `test` targets remain empty NetBeans stubs.
 - Ignore `compile.sh`, `burn.sh`, `debug.sh` — stale leftovers from an unrelated STM32
   project.
 - FPGA command bytes and register magic values are silicon-tied — match existing patterns,

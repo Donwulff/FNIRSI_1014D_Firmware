@@ -745,6 +745,83 @@ per read cycle, not just at mode entry), and **F35** (unreproduced). Variant pol
 Atlan4 behavior (a known divergence vs pecostm32's 1013D upstream — e.g. the F25 `0x28`
 restore stays `#if PORT_1014D`); it needs testing on real hardware before any claim.
 
+## 5f. 2026-09-20 review fixes (hardware verification pending)
+
+Addresses R1-R10 from the 2026-09-20 review. Source changes only; no loader or FPGA
+binary changes and no flashing. The 1013D behavior change is limited to restoring its
+Atlan boolean move-speed contract.
+
+- **R1, SD overlap:** 1014D calibration/settings move from 708/709 to 2046/2047.
+  Startup validates an MBR/FAT32 layout with all partitions at sector 2048 or later,
+  migrates checksum-valid legacy sectors with readback verification, and preserves
+  valid destination data. Build-time header/size/offset checks reject images reaching
+  the new reserved sectors. Existing users must back up and run the new scope via
+  loader F3/FEL before writing its packed image; see README and BOOT_NOTES. Data already
+  overwritten in legacy sectors cannot be recovered by this migration.
+- **R2/R3, roll display:** 1014D acquisition no longer draws through an implicit buffer
+  target. A dedicated renderer rebuilds the current sweep from the circular sample
+  buffer, composites overlay menus, and blits only the P14 trace window. Full-screen
+  views suppress acquisition/drawing. The sample timer is nonblocking and wrap-safe.
+  The 1013D roll path remains unchanged.
+- **R4, move speed:** fast remains 10 on 1014D but is again 0 on 1013D; numeric
+  zero-to-fast migration is 1014D-only for both settings and waveform restore.
+- **R5/R6, Vavg:** a 1014D-only average sample count marks invalid startup/roll readings
+  and ties the sum to its capture length. Waveform restore reconstructs the sum from
+  the format's 3000 saved samples, independent of the previous live capture.
+- **R7, clock search:** force samplemode=0 and AUTO, restoring both on completion or
+  timeout. Restore the long-timebase hardware path when invoked from roll mode.
+- **R8/R9, probe errors:** abort on any capture timeout, restore acquisition settings,
+  and explicitly leave previous files untouched. Short writes and either close error
+  prevent the Saved message.
+- **R10, geometry:** the on-scope probe now requires the stock FPGA. The analyzer keeps
+  generic statistics/CSV export for existing custom dumps but skips stock ring geometry
+  unless the accompanying report explicitly identifies fw_fpga=1.
+
+Regression command: `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/tests -v`.
+Synthetic data and generated host binaries stay in temporary directories, not the repo.
+### Hardware acceptance checklist
+
+Use the 1014D with its stock FPGA, initially at the stock 50 MHz sampling clock.
+Keep the whole-card backup and do not run Restore defaults or Base calibration before
+checking migration: those would change the settings/calibration being verified.
+
+1. **Migration and startup (first):** record the old settings/trim values; back up the
+   whole card and check its MBR partition starts as described in README. Enter FEL via
+   loader F3, not the old application's save-and-FEL action. Run the new scope-only
+   binary. Expect no SD error and retention of valid old settings/calibration. If the
+   old sectors were already overwritten, stop and assess the backup rather than
+   treating defaults as proof of successful preservation. Without `scope.bmp`, expect
+   the built-in credits without a missing-file warning.
+2. **SD installation and persistence:** only after the FEL check, install the packed
+   image at 8 KiB. Confirm the build stamp and settings after boot. Change a benign
+   setting such as brightness, use Factory settings > Reboot to save, then power-cycle.
+   Expect the saved value, unchanged calibration/trim and reliable boot each time.
+3. **Roll display:** enter 500 ms/div and 50 s/div from a short timebase. Expect samples
+   during the first sweep, not only after it wraps, and responsive keys between samples.
+   Open/close main/channel menus and adjust grid brightness; traces should remain under
+   overlays, which must stay intact. Open picture/file views: no trace lines may overwrite
+   them. Return to live view, exercise RUN/STOP, then NORMAL/SINGLE at 500 ms/div with a
+   suitable low-voltage test signal. Check triggering, stopping and re-arming.
+4. **Vavg and waveforms:** cold-start with Vavg enabled; an unavailable average should
+   show dashes until a capture arrives, not an extreme value. Save a waveform at a steady
+   input level, change the live level, then reload it. Vavg must reflect the saved trace,
+   not the last live capture. Repeat for both channels and return to live acquisition.
+5. **Clock search:** from NORMAL and SINGLE with the trigger outside the signal range,
+   run Sampling clock auto search. The stock-clock captures must not time out merely
+   because no trigger occurs. Check restoration of the original trigger mode, timebase,
+   channel settings and live acquisition; repeat from roll, then restore 50 MHz manually.
+6. **Acquisition probe:** at 10 ms/div or faster, run the probe and copy/analyze its new
+   report/dump pair. Expect completion, matching settings and usable files. Optionally
+   test a full filesystem on a spare backed-up card: it must not claim Saved on failure.
+   Do not disconnect hardware or interrupt SD writes to manufacture errors; timeout and
+   close-error paths have host fault-injection coverage.
+
+Record the commit/build stamp, FPGA version, sampling clock, timebase, trigger mode,
+input conditions and pass/fail observations. Keep screenshots/dumps under ignored
+`bench/`, not in commits. No 1013D hardware result is implied by its build/host tests.
+The custom-FPGA loader version wait and FPGA timing/analog validation remain separate
+unresolved trial blockers: do not flash the custom FPGA as part of this checklist.
+
 ## 6. Reproduction appendix
 
 ```bash
