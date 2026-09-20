@@ -69,6 +69,7 @@ build: .build-post
 
 .build-pre:
 	@echo "Generujem build_time.h s aktuálnym dátumom..."
+	rm -f dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin dist/Debug/GNU_ARM-Linux/fnirsi_1013d*.bin dist/Debug/GNU_ARM-Linux/fnirsi_1014d*.bin
 	@echo "#ifndef BUILD_TIME_H" > build_time.h
 	@echo "#define BUILD_TIME_H" >> build_time.h
 	@echo "#define COMPILE_YEAR $$(date +%y)" >> build_time.h
@@ -126,6 +127,7 @@ build: .build-post
 	$(eval BOOTLOADER_BASE:=$(shell grep -q 'PORT_1014D 1' port_config.h && echo bootloader_1014d_base.bin || echo bootloader_base.bin))
 	$(eval BOOTLOADER_OFFSET:=$(shell grep -q 'PORT_1014D 1' port_config.h && echo 0x8000 || echo 0x5BC00))
 	@echo ">>> BOOTLOADER: $(BOOTLOADER_BASE) at offset $(BOOTLOADER_OFFSET)"
+	python3 ../tools/check_sd_layout.py dist/Debug/GNU_ARM-Linux/fnirsi_101xd_scope.bin $(BOOTLOADER_BASE) $(BOOTLOADER_OFFSET)
 	cp $(BOOTLOADER_BASE) dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin
 	./flashfilepacker -o dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin -i dist/Debug/GNU_ARM-Linux/fnirsi_101xd_scope.bin -l $(BOOTLOADER_OFFSET)
 

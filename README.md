@@ -19,10 +19,18 @@ You do **not** need NetBeans, the reference trees, an FPGA build, or a splash im
 - Hold a key at power-on for recovery: **F2 = stock firmware**, **F3 = FEL**.
 - Already installed? Use FEL to try `fnirsi_1014d_scope.bin` in RAM before installing it.
 
+**Upgrading a 1014D build from before 2026-09-20? Back up the entire card and run the
+new scope-only binary through FEL before writing the packed image.** Old builds placed
+settings/calibration inside the growing application. This build migrates valid data to
+reserved sectors 2046/2047 at startup. Use the loader's **F3** to enter FEL: the old
+application's Factory-settings FEL action saves to the overlapping sector. A successful
+startup of the new build completes migration; `SD ERROR` means stop before installing.
+Already-overwritten calibration cannot be recovered automatically; retain older backups.
+
 ### First install (Linux)
 
 1. **Build only the active project.** Use x86-64 Linux (the bundled packaging tools are
-   Linux x86-64 binaries), GNU Make, and `arm-none-eabi-gcc` / ARM binutils on your PATH.
+   Linux x86-64 binaries), Python 3, GNU Make, and `arm-none-eabi-gcc` / ARM binutils on your PATH.
    From a fresh checkout:
 
    ```sh
@@ -54,6 +62,8 @@ You do **not** need NetBeans, the reference trees, an FPGA build, or a splash im
    Inspect `sudo fdisk -l /dev/sdX`: the card must have a FAT32 partition and **all
    partitions must start at or beyond 1 MiB** (sector 2048 for 512-byte sectors). If the
    layout differs or you cannot identify the disk confidently, **stop before writing**.
+   The 1014D port requires an MBR partition table, not GPT or an unpartitioned filesystem.
+   Existing port users must complete the FEL migration above before step 3.
 
 3. **Install the packed SD image, not the scope-only binary.** From the project directory
    above, with the card's partitions still unmounted:
@@ -107,7 +117,8 @@ An optional `scope.bmp` still overrides the built-in splash. It must match the s
 own screenshot format exactly: 800x480, top-down RGB565 BMP with the 70-byte header defined
 in `variables.c` (`bmpheader`); an arbitrary BMP export may not match. A missing splash is
 normal; an unreadable or malformed one still produces a file error. **`SD ERROR` is not
-a missing splash**: it means the FAT filesystem could not be mounted.
+a missing splash**: it means a filesystem, SD-layout or configuration-migration check
+failed. Stop before installing an update and inspect the card/backup.
 
 ## Naming: "101xd" = the 1013D/1014D family
 

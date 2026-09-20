@@ -59,12 +59,29 @@ Consequences in the current tree:
 
 ## SD sector map (as used by this tree)
 
+**2026-09-20 overlap fix:** the 1014D application has grown beyond sectors 708/709.
+Those sectors are now legacy migration sources only on the 1014D. Its input calibration
+and settings live at **2046 and 2047**, respectively; the 1013D layout is unchanged.
+The build checks both the scope header length and packed-image extent, rejects overlap,
+and removes stale packed images before building. No loader change is needed.
+
+Before installing this update over an older 1014D port, back up the whole card, enter
+FEL via the loader's F3 (not the old application's save-and-FEL action), and run the new
+scope-only binary. Startup checks the MBR: all partitions must start at sector 2048 or
+later and a FAT32 partition must exist. Valid legacy sectors are copied to the new
+locations and read back for verification, without writing the old sectors. Existing
+valid destination sectors take precedence. `SD ERROR` during this step means do not
+install; inspect the layout/card. Only after a successful startup install the packed
+image. Writing the packed image first destroys any remaining legacy calibration in its
+range; data already overwritten by previous images requires a backup or recalibration.
+Later configuration writes also recheck the reserved space before writing.
+
 | Sector | Contents | Reader/writer |
 |---|---|---|
 | 16 (byte 8192) | SPL + loader image (dd target `seek=8 bs=1024`) | BROM |
 | 80 (image offset 0x8000) | scope program, eGON.EXE header | `fnirsi_1014d_startup` |
-| 708 | input calibration data | `scope_load/save_input_calibration_data()` |
-| 709 | scope settings (checksummed blob) | `scope_load/save_configuration_data()` (save fires on the key controller's OFF code) |
+| 708 / 2046 | input calibration data (1013D / 1014D) | `scope_load/save_input_calibration_data()` |
+| 709 / 2047 | scope settings (1013D / 1014D, checksummed blob) | `scope_load/save_configuration_data()` (save fires on the key controller's OFF code) |
 | 710 | display config: magic words `AAAAAAAA/55555555` (0,1), TCON timing (2,3), magic `CCCCCCCC/33333333` (4,5), checksum of words 0–5 (6); byte 0x1F = legacy boot-choice byte | per-chain (row corrected 2026-08-21) — 1013D chain: loader reads it into DRAM, `scope_reset_config_data()` writes it; 1014D chain: nobody reads it from SD (`display_control.c` validates only the never-populated DRAM mirror), the write is `#if !PORT_1014D`-guarded, and the sm boot-switch writer was removed 2026-07-09 |
 
 Both pecostm32's startup and the scope's `display_control.c` **validate the magic words and

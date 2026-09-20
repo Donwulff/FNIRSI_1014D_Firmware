@@ -100,12 +100,10 @@
 
 #define VIEW_NUMBER_OF_SETTINGS         240//200
 
-#define INPUT_CALIBRATION_SECTOR        708    //Location of the input calibration data on the SD card
+#include "sd_card_layout.h"
 #define INPUT_CALIBRATION_SETTING_OFFSET  8    //256 all, used 14*32bit=28; (8-40byte)  //0 and 1 checksum
 #define DC_SHIFT_SETTING_OFFSET          40    //256 all, used 6*32bit=12;  (40-52byte) //8-52byte calculate checksum
 
-#define SETTINGS_SECTOR                 709    //old 700 Location of the settings on the SD card for now
-#define DISPLAY_CONFIG_SECTOR           710
 #define STARTUP_CONFIG_ADDRESS          (uint32*)0x81BFFC1F //value for default start firmware (0-pepco,1-fnirsi, 2-FEL, <3 skip menu)
                                                //configuration_data         file_setup 
 #define CHANNEL1_SETTING_OFFSET          8     //24 all, used 11*16bit=11   used 21*16bit

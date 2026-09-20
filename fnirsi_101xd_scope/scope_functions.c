@@ -7409,6 +7409,90 @@ void scope_display_file_status_message(int32 msgid, int32 alwayswait)
 // Configuration data functions
 //----------------------------------------------------------------------------------------------------------------------------------
 
+#if PORT_1014D
+static int scope_config_layout_valid(void)
+{
+  uint8 mbr[512];
+  uint32 i, start, size;
+  int found_fat32 = 0;
+
+  if(sd_card_read(0, 1, mbr) != SD_OK || mbr[510] != 0x55 || mbr[511] != 0xAA)
+    return 0;
+
+  for(i = 446; i < 510; i += 16)
+  {
+    if(mbr[i + 4] == 0)
+      continue;
+
+    start = (uint32)mbr[i + 8] | ((uint32)mbr[i + 9] << 8) |
+            ((uint32)mbr[i + 10] << 16) | ((uint32)mbr[i + 11] << 24);
+    size = (uint32)mbr[i + 12] | ((uint32)mbr[i + 13] << 8) |
+           ((uint32)mbr[i + 14] << 16) | ((uint32)mbr[i + 15] << 24);
+
+    //Reject GPT, superfloppies and partitions occupying the reserved first MiB.
+    if(mbr[i + 4] == 0xEE || start < SD_MIN_PARTITION_SECTOR || size == 0 ||
+       (mbr[i] != 0 && mbr[i] != 0x80))
+      return 0;
+
+    if(mbr[i + 4] == 0x0B || mbr[i + 4] == 0x0C)
+      found_fat32 = 1;
+  }
+
+  return found_fat32;
+}
+
+static int scope_config_sector_valid(const uint16 *buffer, int calibration)
+{
+  uint32 checksum = 0;
+  uint32 i;
+
+  for(i = calibration ? 8 : 2; i < (calibration ? 60 : 256); i++)
+    checksum += buffer[i];
+
+  if(buffer[0] != (checksum >> 16) || buffer[1] != (checksum & 0xFFFF))
+    return 0;
+
+  if(calibration)
+    return buffer[0] > 0 && buffer[0] < 0xFFFF;
+
+  //Older checksummed settings can still contain usable calibration. The normal
+  //restore path decides whether to retain settings or reset their newer fields.
+  return buffer[2] == SETTING_SECTOR_VERSION_HIGH && buffer[3] != 0 &&
+         buffer[3] <= SETTING_SECTOR_VERSION_LOW;
+}
+
+int scope_prepare_config_storage(void)
+{
+  uint16 buffer[256], verify[256];
+  uint32 i;
+  const uint32 sectors[2] = { INPUT_CALIBRATION_SECTOR, SETTINGS_SECTOR };
+  const uint32 legacy[2] = { LEGACY_INPUT_CALIBRATION_SECTOR, LEGACY_SETTINGS_SECTOR };
+
+  if(!scope_config_layout_valid())
+    return 0;
+
+  //Run via FEL BEFORE replacing a legacy SD image: the old sectors may already
+  //contain application bytes, so only migrate checksum-validated data.
+  for(i = 0; i < 2; i++)
+  {
+    if(sd_card_read(sectors[i], 1, (uint8 *)buffer) != SD_OK)
+      return 0;
+    if(scope_config_sector_valid(buffer, i == 0))
+      continue;
+    if(sd_card_read(legacy[i], 1, (uint8 *)buffer) != SD_OK)
+      return 0;
+    if(!scope_config_sector_valid(buffer, i == 0))
+      continue;
+    if(sd_card_write(sectors[i], 1, (uint8 *)buffer) != SD_OK ||
+       sd_card_read(sectors[i], 1, (uint8 *)verify) != SD_OK ||
+       memcmp(buffer, verify, sizeof(buffer)) != 0)
+      return 0;
+  }
+
+  return 1;
+}
+#endif
+
 void scope_load_configuration_data(void)
 {
 #if 0
@@ -7540,6 +7624,10 @@ void scope_load_configuration_data(void)
 
 void scope_save_configuration_data(void)
 {
+#if PORT_1014D
+  if(!scope_config_layout_valid())
+    return;
+#endif
   //Save the settings for writing to the flash
   scope_save_config_data();
 
@@ -7709,6 +7797,11 @@ void scope_save_input_calibration_data(void)
     uint32 index;
     uint32  checksum = 0;
     uint32 *ptr32;  
+
+#if PORT_1014D
+    if(!scope_config_layout_valid())
+      return;
+#endif
     
     //Clear buffer
     memset(buffer, 0x00, sizeof(buffer));

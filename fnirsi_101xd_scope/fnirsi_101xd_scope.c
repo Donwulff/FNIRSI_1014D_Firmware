@@ -100,7 +100,11 @@ int main(void)
   scope_setup_display_lib();
   
   //Setup and check SD card on file system being present
-  if(f_mount(&fs, "0", 1))
+  if(f_mount(&fs, "0", 1)
+#if PORT_1014D
+     || !scope_prepare_config_storage()
+#endif
+    )
   {
     //Show SD card error message on failure
     //Set max screen brightness

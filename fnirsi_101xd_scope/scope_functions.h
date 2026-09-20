@@ -154,6 +154,9 @@ void scope_display_file_status_message(int32 msgid, int32 alwayswait);
 // Configuration data functions
 //----------------------------------------------------------------------------------------------------------------------------------
 
+#if PORT_1014D
+int scope_prepare_config_storage(void);
+#endif
 void scope_load_configuration_data(void);
 void scope_save_configuration_data(void);
 
