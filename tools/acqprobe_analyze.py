@@ -193,7 +193,7 @@ def analyze(binpath, txtpath, csvpath=None):
     print("=" * 100)
     print("%s  (report: %s)" % (binpath, txtpath if info else "none found"))
     line = "settings: %s/div (idx %d), %s (idx %d)" % (tdivtext, tdiv, rate_text(sidx), sidx)
-    if rate:
+    if rate and info.get("fw_fpga") == 1:
         line += "; 4096-sample ring spans %s per ADC" % si_time(4096 / (rate / 2.0))  # ring addresses are per-ADC: half the interleaved rate
     print(line)
 
@@ -258,6 +258,18 @@ def analyze(binpath, txtpath, csvpath=None):
         else:
             print("re-read determinism: blocks %d and %d differ in %d/%d samples (max delta %d, first at %d)"
                   % (i, j, nd, n, maxd, first))
+
+    if csvpath:
+        with open(csvpath, "w") as f:
+            f.write("k," + ",".join("blk%d_0x%02X" % (i, c) for i, c in enumerate(dump["cmds"])) + "\n")
+            for k in range(dump["samples"]):
+                f.write("%d,%s\n" % (k, ",".join(str(dump["data"][i][k]) for i in range(dump["blocks"]))))
+        print("csv: wrote %s" % csvpath)
+
+    if not info or info.get("fw_fpga") != 1:
+        print("ring-wrap and capture geometry skipped: only stock fw_fpga=1 is supported;")
+        print("custom/unknown FPGA dumps need their own ring size and pointer interpretation")
+        return
 
     # --- wrap: does b[k] equal b[k+W]? exact only at the true ring modulus ---
     print("ring-wrap test (equal fraction of full overlap; 1.000 = exact):")
@@ -335,13 +347,6 @@ def analyze(binpath, txtpath, csvpath=None):
             print("  -> the %d-address gap starts past the readout window (fresh off-window data"
                   % glen)
             print("     in between); the writer never overwrites it within a capture (scratch headroom)")
-
-    if csvpath:
-        with open(csvpath, "w") as f:
-            f.write("k," + ",".join("blk%d_0x%02X" % (i, c) for i, c in enumerate(dump["cmds"])) + "\n")
-            for k in range(dump["samples"]):
-                f.write("%d,%s\n" % (k, ",".join(str(dump["data"][i][k]) for i in range(dump["blocks"]))))
-        print("csv: wrote %s" % csvpath)
 
 
 def per_s(loops, ms):

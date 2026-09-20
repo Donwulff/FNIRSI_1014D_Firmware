@@ -1901,21 +1901,32 @@ static FIL    acqprobe_file;
 static uint32 acqprobe_file_ok;
 
 //Bounded wait on the triggered/buffer-full flag; auto trigger mode makes this finite
-static void acqprobe_wait_done(void)
+static int acqprobe_wait_done(void)
 {
   uint32 guard = 10000000;
 
-  while((fpga_done_conversion() == 0) && (--guard));
+  while(guard--)
+  {
+    if(fpga_done_conversion())
+      return 1;
+  }
+  return 0;
 }
 
 static void acqprobe_write(const void *data, uint32 count)
 {
   UINT bw;
 
-  if(acqprobe_file_ok && (f_write(&acqprobe_file, data, count, &bw) != FR_OK))
+  if(acqprobe_file_ok && ((f_write(&acqprobe_file, data, count, &bw) != FR_OK) || bw != count))
   {
     acqprobe_file_ok = 0;
   }
+}
+
+static void acqprobe_close(void)
+{
+  if(f_close(&acqprobe_file) != FR_OK)
+    acqprobe_file_ok = 0;
 }
 
 //"label=value\r\n" without libc; label is trusted to keep the line under 64 characters
@@ -1961,6 +1972,7 @@ void scope_do_acquisition_probe(void)
 {
   uint32 backup_triggermode = scopesettings.triggermode;
   uint32 backup_samplemode  = scopesettings.samplemode;
+  uint32 capture_failed = 0;
   uint32 aloops = 0, bloops = 0;
   uint32 aticks, bticks, dticks;
   uint32 rawfirst[8];
@@ -1969,6 +1981,18 @@ void scope_do_acquisition_probe(void)
   uint32 data;
   uint32 i;
   uint32 ypos;
+
+  //The dump and analyzer currently implement the stock 4096-byte ADC rings.
+  if(fpgasettings.fw_FPGA != 1)
+  {
+    display_set_fg_color(BLACK_COLOR);
+    display_fill_rect(160, 200, 480, 40);
+    display_set_fg_color(WHITE_COLOR);
+    display_set_font(&font_0);
+    display_text(170, 212, "Acq probe requires the stock FPGA");
+    uart1_wait_for_user_input();
+    return;
+  }
 
   //The probe needs the triggered short-timebase path; roll mode runs trigger-disabled
   if(scopesettings.long_mode)
@@ -1999,7 +2023,11 @@ void scope_do_acquisition_probe(void)
   while((aloops < ACQPROBE_RATE_LOOPS) && ((timer0_get_ticks() - aticks) < ACQPROBE_PHASE_LIMIT_MS))
   {
     fpga_do_conversion();
-    acqprobe_wait_done();
+    if(!acqprobe_wait_done())
+    {
+      capture_failed = 1;
+      goto restore_config;
+    }
     aloops++;
   }
   aticks = timer0_get_ticks() - aticks;
@@ -2009,7 +2037,11 @@ void scope_do_acquisition_probe(void)
   while((bloops < ACQPROBE_RATE_LOOPS) && ((timer0_get_ticks() - bticks) < ACQPROBE_PHASE_LIMIT_MS))
   {
     fpga_do_conversion();
-    acqprobe_wait_done();
+    if(!acqprobe_wait_done())
+    {
+      capture_failed = 1;
+      goto restore_config;
+    }
 
     data = fpga_prepare_for_transfer();
 
@@ -2050,7 +2082,11 @@ void scope_do_acquisition_probe(void)
 
   //Phase C: one more capture, then dump all four ADC rings from the raw trigger address
   fpga_do_conversion();
-  acqprobe_wait_done();
+  if(!acqprobe_wait_done())
+  {
+    capture_failed = 1;
+    goto restore_config;
+  }
   rawdump = fpga_prepare_for_transfer();
 
   dticks = timer0_get_ticks();
@@ -2061,10 +2097,23 @@ void scope_do_acquisition_probe(void)
   dticks = timer0_get_ticks() - dticks;
 
   //Restore the user's trigger configuration and let the main loop re-arm normally
+restore_config:
   scopesettings.triggermode = backup_triggermode;
   fpga_set_trigger_mode();
   scopesettings.samplemode = backup_samplemode;
   scopesettings.display_data_done = 1;
+
+  if(capture_failed)
+  {
+    display_set_fg_color(BLACK_COLOR);
+    display_fill_rect(160, 130, 480, 290);
+    display_set_fg_color(WHITE_COLOR);
+    display_set_font(&font_0);
+    display_text(170, 180, "ACQUISITION TIMEOUT - probe aborted");
+    display_text(170, 205, "Previous probe files were not replaced");
+    uart1_wait_for_user_input();
+    return;
+  }
 
   //Human readable summary on the SD card
   acqprobe_file_ok = (f_open(&acqprobe_file, "acqprobe.txt", FA_CREATE_ALWAYS | FA_WRITE) == FR_OK);
@@ -2094,7 +2143,7 @@ void scope_do_acquisition_probe(void)
     }
 
     acqprobe_line("ringdump_raw14=", rawdump);
-    f_close(&acqprobe_file);
+    acqprobe_close();
   }
 
   //Raw ring dump: 4-char magic, six little-endian uint32 header fields, five command
@@ -2118,7 +2167,7 @@ void scope_do_acquisition_probe(void)
       acqprobe_write(header, sizeof(header));
       acqprobe_write(acqprobe_adc_commands, sizeof(acqprobe_adc_commands));
       acqprobe_write(acqprobe_ring, sizeof(acqprobe_ring));
-      f_close(&acqprobe_file);
+      acqprobe_close();
     }
 
     acqprobe_file_ok &= saved_txt_ok;

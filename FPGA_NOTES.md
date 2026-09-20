@@ -191,6 +191,11 @@ driven run closed the last open item — the post-trigger fill boundary — belo
   copied off as `bench/acqprobe/<date-conditions>/` (the scope overwrites its two SD
   files every run); `tools/acqprobe_analyze.py` prints the full report and exports
   `--csv`.
+  **2026-09-20 safety update:** the probe refuses non-stock FPGA versions until their
+  larger ring geometry is supported. Capture timeouts abort without replacing previous
+  files; short writes or close failures suppress the Saved message. For older custom or
+  unidentified dumps the analyzer still exports CSV/statistics but skips stock-specific
+  wrap and fill geometry. This does not resolve the loader's custom-version boot gate.
 - **Independent corroboration** (`donwulff-notes.md`, 2022-era): "2500 displayed of 3000
   available with room for 4096" and a ~24 KB total sample-memory figure — matches the
   12-bit-ring inference (4×4096 = 16 KB + AWG block ≈ 20+ KB).
