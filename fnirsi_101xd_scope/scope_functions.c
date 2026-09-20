@@ -5535,9 +5535,11 @@ void scope_restore_setup_from_file(void)
   scopesettings.rightmenustate   = ptr[index++];
   scopesettings.screenbrightness = ptr[index++];
 
-  //Safety for old zeroed movespeed
+#if PORT_1014D
+  //Safety for old zeroed movespeed in the numeric 1014D control.
   if (scopesettings.movespeed == 0)
       scopesettings.movespeed = MOVE_SPEED_FAST;
+#endif
   scopesettings.gridbrightness   = ptr[index++];
   scopesettings.alwaystrigger50  = ptr[index++];
   scopesettings.xymodedisplay    = ptr[index++];
@@ -7911,7 +7913,7 @@ void scope_reset_config_data(void)
   scopesettings.triggerhorizontalposition = 357;    //int32
   scopesettings.triggerverticalposition   = 300;
 
-  //Set move speed to fast (default like pecostm32 1014D)
+  //Fast is numeric 10 on 1014D, boolean 0 in Atlan's 1013D touch UI.
   scopesettings.movespeed = MOVE_SPEED_FAST;
 
   //Set time base to 200uS/div
@@ -8322,10 +8324,12 @@ void scope_restore_config_data(void)
     scopesettings.movespeed        = *ptr++;
     scopesettings.rightmenustate   = *ptr++;
 
+#if PORT_1014D
     //Safety: old resets saved 0 which disables all trim/position movement until MOVE_SPEED pressed.
     //Force a sane default (Fast) if zero.
     if (scopesettings.movespeed == 0)
         scopesettings.movespeed = MOVE_SPEED_FAST;
+#endif
     scopesettings.confirmationmode = *ptr++;
     scopesettings.screenbrightness = *ptr++;
     scopesettings.gridbrightness   = *ptr++;
