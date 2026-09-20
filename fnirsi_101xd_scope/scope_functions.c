@@ -1591,10 +1591,17 @@ uint8 auto_detect_max_clean_sampling_clock(void)
   // Save the settings this search touches; restored at the end
   uint8 saved_timeperdiv  = scopesettings.timeperdiv;
   uint8 saved_samplerate  = scopesettings.samplerate;
+  uint8 saved_samplemode  = scopesettings.samplemode;
+  uint8 saved_triggermode = scopesettings.triggermode;
   uint8 saved_ch1_enable  = scopesettings.channel1.enable;
   uint8 saved_ch1_vperdiv = scopesettings.channel1.samplevoltperdiv;
   int16 saved_ch1_comp1   = scopesettings.channel1.adc1compensation;
   int16 saved_ch1_comp2   = scopesettings.channel1.adc2compensation;
+
+  //fpga_do_conversion derives 0x0F from samplemode on every arm.
+  scopesettings.samplemode = 0;
+  scopesettings.triggermode = 0;
+  fpga_set_trigger_mode();
 
   // Measure the RAW hardware mismatch: the read path applies the stored interleave
   // compensation at rate 0, which was calibrated for one specific clock and would
@@ -1738,7 +1745,10 @@ uint8 auto_detect_max_clean_sampling_clock(void)
   // Re-enable the trigger system and restore the settings the search touched. This runs
   // standalone from the clock menu now, so the FPGA side must be fully restored here
   // (rate, timebase, channel sensitivity/offset), not just the local settings copies.
-  fpga_write_cmd(0x0F); fpga_write_byte(0x00);
+  scopesettings.samplemode = saved_samplemode;
+  scopesettings.triggermode = saved_triggermode;
+  fpga_set_trigger_mode();
+  fpga_write_cmd(0x0F); fpga_write_byte(saved_samplemode == 1 ? 0 : 1);
   scopesettings.timeperdiv = saved_timeperdiv;
   scopesettings.samplerate = saved_samplerate;
   scopesettings.channel1.enable = saved_ch1_enable;
@@ -1749,7 +1759,11 @@ uint8 auto_detect_max_clean_sampling_clock(void)
   fpga_set_channel_voltperdiv(&scopesettings.channel1);
   fpga_set_channel_offset(&scopesettings.channel1);
   fpga_set_sample_rate(scopesettings.samplerate);
-  fpga_set_time_base(scopesettings.timeperdiv);
+  if(scopesettings.long_mode)
+    fpga_set_long_timebase(scopesettings.timeperdiv);
+  else
+    fpga_set_time_base(scopesettings.timeperdiv);
+  scopesettings.display_data_done = 1;
 
   // Detailed summary of all attempts (use space below the per-candidate lines so everything
   // stays on screen for a while and is not overwritten by Ch1/Ch2 status text at y~255).
