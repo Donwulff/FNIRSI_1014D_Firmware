@@ -1641,10 +1641,18 @@ void ui_display_vavg(uint32 ypos, PCHANNELSETTINGS settings)
   int32         resolution;
   int64         volts;
 
+  if(!settings->averagecount)
+  {
+    display_set_fg_color(COLOR_WHITE);
+    display_set_font(&font_1);
+    display_text(MEASUREMENT_VALUE_X + 26, ypos + 2, "- - -");
+    return;
+  }
+
   //High-resolution average: divide by samplecount LAST so the ~5 bits of oversampling that
   //averaging ~1500 samples earns survive into the reading, instead of integer-truncating to a
   //whole ADC code first (PORT_AUDIT F28). averagesum is the pre-division compensated sample sum.
-  volts = (int64)settings->averagesum - ((int64)128 * (int64)scopesettings.samplecount);
+  volts = (int64)settings->averagesum - ((int64)128 * settings->averagecount);
   volts = (volts * (int64)signal_adjusters[settings->samplevoltperdiv]) >> VOLTAGE_SHIFTER;
 
   //Scale the data based on the two volt per div settings when they differ
@@ -1655,7 +1663,7 @@ void ui_display_vavg(uint32 ypos, PCHANNELSETTINGS settings)
     volts = (volts * (int64)vertical_scaling_factors[settings->displayvoltperdiv][settings->samplevoltperdiv]) / 10000;
   }
 
-  volts = (volts * (int64)vcd->mul_factor) / (int64)scopesettings.samplecount;
+  volts = (volts * (int64)vcd->mul_factor) / settings->averagecount;
 
   //One averaged step is ~1 ADC code / sqrt(N); use a conservative /32 (~5 bits) so the readout
   //gains about one honest decimal, never more than the field can hold.
@@ -3313,6 +3321,20 @@ void ui_restore_setup_from_file(void)
   uint32 *ptr = viewfilesetupdata;
   uint32 index = 0;
   uint32 measurement;
+
+  //This file format stores exactly 3000 compensated samples per channel, not
+  //the current live capture length. Rebuild Vavg without changing the format.
+  scopesettings.samplecount = 3000;
+  scopesettings.nofsamples = 1500;
+  scopesettings.channel1.averagesum = 0;
+  scopesettings.channel2.averagesum = 0;
+  for(index = 0; index < 3000; index++)
+  {
+    scopesettings.channel1.averagesum += ((uint8 *)channel1tracebuffer)[index];
+    scopesettings.channel2.averagesum += ((uint8 *)channel2tracebuffer)[index];
+  }
+  scopesettings.channel1.averagecount = 3000;
+  scopesettings.channel2.averagecount = 3000;
 
   //Leave space for file version and checksum data
   index = CHANNEL1_SETTING_OFFSET;

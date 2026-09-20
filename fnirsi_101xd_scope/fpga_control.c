@@ -916,6 +916,9 @@ void fpga_read_sample_data(PCHANNELSETTINGS settings, uint32 triggerpoint)
   //Preserve the pre-division compensated sample sum so ui_display_vavg can recover the
   //oversampling resolution -- dividing to a whole ADC code here throws it away (PORT_AUDIT F28)
   settings->averagesum = settings->average;
+#if PORT_1014D
+  settings->averagecount = scopesettings.samplecount;
+#endif
 
   //Calculate the overall average
   settings->average /= scopesettings.samplecount;

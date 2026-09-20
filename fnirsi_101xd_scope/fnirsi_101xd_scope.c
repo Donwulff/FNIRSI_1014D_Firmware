@@ -229,6 +229,8 @@ int main(void)
   
   //Setup the main parts of the screen
 #if PORT_1014D
+  scopesettings.samplecount = fpgasettings.totalsamples;
+  scopesettings.nofsamples = fpgasettings.totalsamples / 2;
   ui_setup_main_screen();
 #else
   scope_setup_main_screen();
@@ -247,8 +249,10 @@ int main(void)
 //  scopesettings.nofsamples  = SAMPLES_PER_ADC;
   //scopesettings.samplecount = SAMPLE_COUNT;
   
+#if !PORT_1014D
   scopesettings.samplecount = fpgasettings.totalsamples;//SAMPLE_COUNT;
   scopesettings.nofsamples = fpgasettings.totalsamples/2;
+#endif
   
   //fpgasettings.settriggerpoint = 1500;
   //fpgasettings.totalsamples = 3000;//16382;
