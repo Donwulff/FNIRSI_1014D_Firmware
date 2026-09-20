@@ -15,6 +15,9 @@
 
 #include "usb_interface.h"
 #include "variables.h"
+#if PORT_1014D
+#include "menu_1014d.h"
+#endif
 
 #include "sin_cos_math.h"
 
@@ -821,6 +824,106 @@ void scope_get_long_timebase_data1(void)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+#if PORT_1014D
+void scope_get_long_timebase_data(void)
+{
+  static const uint32 delays[] = { 1000, 400, 200, 100, 40, 20, 10 };
+  uint32 now, delay;
+
+  if(!scopesettings.runstate || scopesettings.waveviewmode ||
+     (!enablesampling && !ui_menu_composite_active()))
+    return;
+
+  if(!triggerlong && scopesettings.triggermode)
+    scope_check_long_trigger();
+  if(!triggerlong)
+    return;
+
+  delay = delays[scopesettings.timeperdiv < 7 ? scopesettings.timeperdiv : 6];
+  now = timer0_get_ticks();
+  //Do not block key handling between samples at slow timebases.
+  if((uint32)(now - previoustimerticks) < delay)
+    return;
+  previoustimerticks = now;
+
+  if(scopesettings.count >= 3000)
+  {
+    if(scopesettings.triggermode == 1)
+    {
+      scopesettings.runstate = RUN_STATE_STOPPED;
+      triggerlong = 0;
+      scope_run_stop_text();
+      return;
+    }
+    if(scopesettings.triggermode == 2)
+    {
+      scope_preset_values();
+      return;
+    }
+    scopesettings.count = 0;
+  }
+
+  fpga_arm_long_timebase_cycle();
+  if(scopesettings.channel1.enable)
+    scopesettings.channel1.tracebuffer[scopesettings.count] = fpga_average_trace_data(&scopesettings.channel1);
+  if(scopesettings.channel2.enable)
+    scopesettings.channel2.tracebuffer[scopesettings.count] = fpga_average_trace_data(&scopesettings.channel2);
+
+  if(scopesettings.xpos > 704)
+    scopesettings.xpos = 7;
+  scopesettings.lastx = scopesettings.xpos++;
+  scopesettings.count++;
+  disp_first_sample = scopesettings.count;
+  disp_have_trigger = 1;
+}
+
+void scope_display_long_trace_data(void)
+{
+  uint32 channel, x, index, points;
+  int32 previous, sample;
+  PCHANNELSETTINGS settings;
+
+  if(!enabletracedisplay && !ui_menu_composite_active())
+    return;
+
+  display_set_screen_buffer(displaybuffertmp);
+  display_set_fg_color(BLACK_COLOR);
+  display_fill_rect(2, 48, 705, 432);
+  scope_draw_grid();
+
+  //Rebuild the current sweep from the 3000-sample circular buffer. Menus can
+  //reuse the scratch buffer without destroying the trace beneath them.
+  points = scopesettings.xpos >= 7 && scopesettings.xpos <= 705 ? scopesettings.xpos - 7 : 0;
+  for(channel = 0; channel < 2; channel++)
+  {
+    settings = channel ? &scopesettings.channel2 : &scopesettings.channel1;
+    if(!settings->enable || !points)
+      continue;
+    index = (scopesettings.count + 3000 - points) % 3000;
+    previous = scope_get_y_sample(settings, index);
+    display_set_fg_color(settings->color);
+    for(x = 7; x < 7 + points; x++)
+    {
+      sample = scope_get_y_sample(settings, index);
+      display_draw_line(x - 1, previous, x, sample);
+      previous = sample;
+      index = (index + 1) % 3000;
+    }
+  }
+
+  ui_draw_outline();
+  ui_display_trigger_settings();
+  ui_display_waiting_triggered_text(scopesettings.runstate == RUN_STATE_RUNNING ? 0 : 1);
+  ui_draw_pointers();
+  ui_display_cursors();
+  ui_redraw_active_menu();
+  display_set_source_buffer(displaybuffertmp);
+  display_set_screen_buffer((uint16 *)maindisplaybuffer);
+  display_copy_rect_to_screen(2, 48, 705, 432);
+  ui_update_measurements();
+  display_set_screen_buffer((uint16 *)maindisplaybuffer);
+}
+#else
 void scope_get_long_timebase_data(void)
 {
   //Default timeout for 50S/div
@@ -1073,6 +1176,8 @@ void scope_get_long_timebase_data(void)
 //----------------------------------------------------------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------------------------------------------------------
+
+#endif
 
 void scope_check_long_trigger(void)
 {

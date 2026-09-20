@@ -43,6 +43,9 @@ void average_filter(uint8* input, size_t size, size_t window_size);
 //void scope_preset_long_mode(void);
 
 void scope_get_long_timebase_data(void);
+#if PORT_1014D
+void scope_display_long_trace_data(void);
+#endif
 
 void scope_check_long_trigger(void);
 

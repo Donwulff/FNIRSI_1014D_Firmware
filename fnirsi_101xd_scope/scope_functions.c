@@ -266,8 +266,15 @@ void scope_adjust_timebase_and_voltdiv (void)
   if(scopesettings.long_mode) //if set long time base, no drawn.
   {
       
+#if PORT_1014D
+    scopesettings.xpos = 7;
+    scopesettings.lastx = 6;
+    scopesettings.channel1.averagecount = 0;
+    scopesettings.channel2.averagecount = 0;
+#else
     scopesettings.xpos = 4;
     scopesettings.lastx = 3;
+#endif
     scopesettings.count = 0;
     
     //scopesettings.lastx=726;
@@ -325,6 +332,7 @@ void scope_adjust_timebase_and_voltdiv (void)
     //1014D: the per frame display path redraws grid, chrome and traces with the P14 UI
     //functions. Drawing and blitting the 1013D chrome here flashed the touch UI pointers
     //and bottom position scroller over the screen on every time base change.
+    display_set_screen_buffer((uint16 *)maindisplaybuffer);
 #endif
 }
   

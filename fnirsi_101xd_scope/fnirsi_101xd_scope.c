@@ -451,12 +451,11 @@ int main(void)
     DBG_STAGE(9);   //trace pipeline done, about to poll keys
 #if PORT_1014D
     sm_handle_user_input();
-    //In roll mode scope_get_long_timebase_data() draws the trace itself; running the
-    //standard renderer as well made the two repaint over each other every pass (F21
-    //mechanism 1, REVIEW-2026-08-21 follow-up). Overlay menus are not composited during
-    //roll -- the roll sweep's own blit would wipe them anyway.
-    if(!scopesettings.long_mode && (enabletracedisplay || ui_menu_composite_active()))
+    if(enabletracedisplay || ui_menu_composite_active())
     {
+      if(scopesettings.long_mode && !scopesettings.waveviewmode)
+        scope_display_long_trace_data();
+      else
         scope_display_trace_data();
     }
 #else
