@@ -48,8 +48,12 @@ firmware** and bridged to Atlan4 APIs:
 Deliberately **not** imported: pecostm32's new 1014D FPGA design (stock FPGA `0x1432` is
 used; Atlan4 also supports PECO FPGAs `0x1532`/`0x1632` via `fpgasettings.fw_FPGA`), his
 `fnirsi_1014d_scope.c` main, and his USB stack (Atlan4's are kept). The SD bootloader for the
-1014D **is** pecostm32's `fnirsi_1014d_startup`, committed as
-`fnirsi_101xd_scope/bootloader_1014d_base.bin` (hash-verified local rebuild).
+1014D derives from pecostm32's `fnirsi_1014d_startup`. Since 2026-09-23 the active
+build compiles our source import in `bootloader_1014d/`: it accepts `0x1432`/`0x1532`
+and enters FEL after bounded readiness failure. The old committed
+`fnirsi_101xd_scope/bootloader_1014d_base.bin` remains a stock-only provenance binary,
+not selected by normal builds. Source/build/tests and hardware checklist:
+`bootloader_1014d/README.md`. Do not edit or build the vendored reference project.
 
 History: `main` = pristine pecostm32 1013D upstream; `PORT_A` = first-generation port
 (`port_a.c`, superseded and deleted); `9daa91f` on this branch vendors pristine Atlan4.
@@ -148,6 +152,8 @@ make clean
 ```
 
 The Makefile echoes `[port_config.h variant: …]` first and `>>> BOOTLOADER: …` near the end.
+The 1014D build automatically builds `bootloader_1014d/` and prints its generated
+path on the `BOOTLOADER SOURCE` line. The 1013D binary selection is unchanged.
 **Always confirm both before flashing**: 1014D must say `v1.00o5-1014D` and
 `bootloader_1014d_base.bin at offset 0x8000`; 1013D says `bootloader_base.bin at 0x5BC00`.
 **Never leave a wrong-variant build as the last artifact** — rebuild the intended variant

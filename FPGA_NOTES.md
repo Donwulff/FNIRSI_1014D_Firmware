@@ -30,9 +30,12 @@ Atlan4 and pecostm32's official 1014D firmware — so the legacy path below is w
 | `0x1632` | 3 | pecostm32 replacement bitstream, EF2 |
 | other | 0 | unknown — most fw-dependent code then takes neither branch |
 
-The **scope** calls the non-blocking `fpga_get_version()`. The **1014D boot loader**
-(pecostm32's startup) calls a blocking `fpga_check_ready()` that spins until `0x1432` — see
-BOOT_NOTES.md; this is the single biggest new-FPGA hazard. (Atlan4's 1013D bootloader v0.8
+The **scope** calls the non-blocking `fpga_get_version()`. Since **2026-09-23**, the
+source-built **1014D boot loader** (`bootloader_1014d/`) accepts `0x1432`/`0x1532`
+with bounded retries and enters FEL if neither responds. Older installed loaders
+still spin forever for `0x1432`: install the new packed SD image and test its F3/FEL
+menu on the stock FPGA before replacing the bitstream. See BOOT_NOTES.md.
+(Atlan4's 1013D bootloader v0.8
 neutered that wait — the routine is present but never called — which is exactly what their
 FPGA readmes' "install bootloader v0.8 or higher first" is about.)
 
@@ -302,12 +305,12 @@ What the vendored AL3 project answers:
   are dead code: zero call sites** (verified by full disassembly + caller search,
   BOOT_NOTES.md). Older loaders (Atlan4 fw0.02–0.04 and pecostm32's
   `fnirsi_1014d_startup`) hang forever on a non-0x1432 bitstream before their boot menus.
-- **Hard prerequisite for the 1014D chain unchanged**: our `bootloader_1014d_base.bin`
-  (pecostm32's startup) has the **live** wait — a 0x1532 bitstream bricks the SD boot path
-  including the FEL menu item (recovery: pull SD → BROM falls back to stock in SPI NOR, or
-  FEL). Follow Atlan4's precedent: remove/relax the `fpga_check_ready()` call in
-  `fnirsi_1014d_startup` (source vendored; pecostm32's own comment suggests it), rebuild
-  `bootloader_1014d_base.bin`, hardware-test the loader, **only then** flash the bitstream.
+- **1014D loader change implemented 2026-09-23:** `bootloader_1014d/` is built and
+  packaged automatically, accepts stock/custom AL3 and enters FEL on readiness failure.
+  The old tracked binary is retained for provenance, not selected by the build.
+  **Install and hardware-test the new loader before replacing the FPGA**; a scope-only
+  FEL load does not install it. Removing SD restores neither the FPGA bitstream nor
+  compatibility between stock CPU firmware and a custom FPGA. Keep external FPGA recovery.
 - Minor: the `PORT_A_KEYDEBUG` overlay prints the version expecting 1432 (cosmetic).
 
 ## pecostm32's 1014D FPGA reverse engineering — vendored 2026-07-10 (`pecostm32-RE/`)

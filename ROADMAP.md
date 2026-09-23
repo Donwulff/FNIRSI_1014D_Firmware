@@ -137,6 +137,10 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
     under any other bitstream — Atlan4's v0.8 simply never calls it; follow that precedent),
     optionally adopt the boot byte (item 2), rebuild `bootloader_1014d_base.bin`,
     hardware-test, only then flash a new bitstream.
+    *Implemented in code 2026-09-23:* source-built `bootloader_1014d/` accepts stock
+    `0x1432` and custom AL3 `0x1532`; bounded failure enters FEL automatically. Normal
+    1014D builds package it, with no new committed binary or persistent boot byte.
+    Still required: packed-image installation and stock-FPGA F1/F2/F3 hardware tests.
 18. After a fw≥2 bitstream boots: exercise the `fw_FPGA==2` acquisition path (0x0B/0x0C
     geometry, recalibrated constants — all Atlan4-1013D-tuned today) and re-derive
     calibration on the 1014D.

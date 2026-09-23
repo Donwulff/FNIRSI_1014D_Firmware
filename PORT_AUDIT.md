@@ -822,6 +822,27 @@ input conditions and pass/fail observations. Keep screenshots/dumps under ignore
 The custom-FPGA loader version wait and FPGA timing/analog validation remain separate
 unresolved trial blockers: do not flash the custom FPGA as part of this checklist.
 
+## 5g. 2026-09-23 dual-FPGA 1014D loader (hardware verification pending)
+
+The loader wait noted in section 5f is now fixed in source. `bootloader_1014d/`
+imports the matching pecostm32 startup sources without modifying the vendored tree.
+Its bounded readiness check accepts stock `0x1432` and custom AL3 `0x1532`. Normal
+key-held F1/F2/F3 selection is retained; retry exhaustion enters FEL without waiting
+for keys, including when a nonworking FPGA leaves the backlight off. Normal successful
+startup gets no additional wait; the application's splash is unchanged.
+
+The 1014D scope build now builds/packages the loader from source. The 1013D still
+uses its unchanged committed Atlan4 loader. No committed binary is modified. Linker
+and host checks enforce the loader's SRAM size reserve and eGON header/checksum.
+Host regressions exercise actual readiness/menu functions for both versions,
+delayed readiness, timeout, unsupported versions, default boot, and all F-key choices.
+
+Hardware acceptance is in `bootloader_1014d/README.md`: install the **packed** SD image
+and test cold boot/reboot/F1/F2/F3 with the stock FPGA before a custom-FPGA trial.
+Loading only the scope via FEL does not exercise or replace the installed loader.
+The custom FPGA remains untested, with timing/analog and external-programmer recovery
+requirements unchanged. F2 cannot restore the FPGA flash. No flashing was performed.
+
 ## 6. Reproduction appendix
 
 ```bash

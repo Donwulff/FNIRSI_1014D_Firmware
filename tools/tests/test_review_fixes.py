@@ -29,8 +29,8 @@ def load_tool(name):
     return module
 
 
-def function(filename, name):
-    source = (SCOPE / filename).read_text()
+def function(filename, name, directory=SCOPE):
+    source = (directory / filename).read_text()
     match = re.search(r"(?m)^[ \t]*(?:static )?\w+ " + name + r"\([^;\n]*\)\s*\n\{", source)
     if not match:
         raise AssertionError("Function not found: " + name)

@@ -42,7 +42,10 @@ Already-overwritten calibration cannot be recovered automatically; retain older 
    Check `port_config.h` has `#define PORT_1014D 1`. The build must finish successfully
    and print **`v1.00o5-1014D`** and
    **`BOOTLOADER: bootloader_1014d_base.bin at offset 0x8000`**. Stop if either differs.
-   Do not build any of the `fnirsi_1013d_startup*` or other loader directories.
+   The 1014D loader is built automatically from `bootloader_1014d/`; the next output
+   line identifies `../bootloader_1014d/build/bootloader_1014d_base.bin` as its source.
+   Do not build the legacy `fnirsi_1013d_startup*` or `fnirsi_1013d_sd_card_bootloader`
+   projects; the active build handles its loader automatically.
 
 2. **Back up the whole SD card before writing anything.** Connect the scope's USB data
    port and enable USB disk mode from its menu, or use a card reader. Identify the disk
@@ -111,7 +114,7 @@ On the 1014D, no `scope.bmp` means a built-in text splash identifying the Atlan4
 and crediting pecostm32, Atlan4, Donwulff and the wider FNIRSI/EEVblog community. No extra
 files are required. To replace an old custom splash with these credits, remove or rename
 `scope.bmp` at the SD card's FAT root. The fallback is drawn by the firmware, not stored
-as an image in this repository. The separate loader and its PECO-labelled menu are unchanged.
+as an image in this repository. The separate loader retains its PECO-labelled F1/F2/F3 menu.
 
 An optional `scope.bmp` still overrides the built-in splash. It must match the scope's
 own screenshot format exactly: 800x480, top-down RGB565 BMP with the 70-byte header defined
@@ -119,6 +122,17 @@ in `variables.c` (`bmpheader`); an arbitrary BMP export may not match. A missing
 normal; an unreadable or malformed one still produces a file error. **`SD ERROR` is not
 a missing splash**: it means a filesystem, SD-layout or configuration-migration check
 failed. Stop before installing an update and inspect the card/backup.
+
+### Custom FPGA preparation
+
+Since 2026-09-23, the source-built 1014D loader accepts both the stock FPGA (`0x1432`)
+and our custom AL3 retarget (`0x1532`). Unsupported or missing version replies now lead
+to FEL after bounded retries instead of an infinite wait. **Install the packed SD image
+to update the loader; loading only the scope application through FEL does not update it.**
+Before changing the FPGA, test ordinary boot and the key-held F1/F2/F3 menu with the
+stock FPGA, following [the loader checklist](bootloader_1014d/README.md#verification).
+The custom bitstream remains untested; its timing/analog checks and external-programmer
+recovery requirements still apply. F2 starts stock CPU firmware, not a stock FPGA image.
 
 ## Naming: "101xd" = the 1013D/1014D family
 

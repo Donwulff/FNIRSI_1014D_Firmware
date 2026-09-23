@@ -72,10 +72,11 @@ bench-verify — behavior differences, not command gaps:
 
 ## Do-not-flash gates (all must pass first)
 
-1. **Bootloader**: our `bootloader_1014d_base.bin` has the LIVE `fpga_check_ready()` spin
-   on version `0x1432` — with a `0x1532` bitstream in the FPGA flash, SD boot (including
-   the loader's FEL menu item) hangs forever. Patch + hardware-test the loader FIRST
-   (FPGA_NOTES §migration). MCU-side recovery exists regardless (BROM FEL over USB).
+1. **Bootloader installation/test**: since 2026-09-23, normal scope builds use
+   `bootloader_1014d/`, accepting `0x1432` and `0x1532`, with automatic FEL on readiness
+   failure. Install the new **packed SD image** and hardware-test normal boot plus
+   F1/F2/F3 on the stock FPGA FIRST (`bootloader_1014d/README.md`). A scope-only FEL
+   load does not update the installed loader; old loaders still hang on `0x1532`.
 2. **FPGA-side recovery**: the stock 1014D FPGA-flash image is vendored
    (`pecostm32-RE/FNIRSI-1014D_FPGA/flash_fpga_1014d.bin`, 1 MB). Flash route = SPI header
    J2 (CH341A / Bus Pirate `flashrom` in generic mode — this unit's chip is a ZB25VQ80,

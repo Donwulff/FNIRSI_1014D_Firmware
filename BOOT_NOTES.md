@@ -1,9 +1,14 @@
 # BOOT_NOTES.md — boot chain, SD layout, loader contracts, and migration assessment
 
-Consolidated from code spelunking 2026-07-09. The authoritative loader source for the
-current 1014D chain is vendored at `FNIRSI_1014D_Firmware/fnirsi_1014d_startup/` (pecostm32);
-the committed `fnirsi_101xd_scope/bootloader_1014d_base.bin` is a hash-verified local rebuild
-of it (re-verified 2026-08-21: byte-identical to our rebuild of his source in the vendor
+Consolidated from code spelunking 2026-07-09. **Since 2026-09-23, the active 1014D
+loader is built from `bootloader_1014d/`**, a source import of pecostm32's startup
+with stock/custom FPGA support and bounded readiness. Normal scope builds package it
+automatically; no loader binaries are added or replaced in git. See
+`bootloader_1014d/README.md` for provenance and the hardware acceptance checklist.
+
+The old committed `fnirsi_101xd_scope/bootloader_1014d_base.bin` remains a historical
+stock-only reference, not the normal build input. It is a hash-verified local rebuild
+of pecostm32's source (re-verified 2026-08-21: byte-identical to our rebuild in the vendor
 tree's `dist/`; NOT bit-identical to the binary pecostm32 originally committed — different
 toolchain, same source).
 
@@ -12,10 +17,10 @@ toolchain, same source).
 1. **BROM** loads the eGON-headered SPL+loader from SD at byte offset 8192 (sector 16).
    If SD boot fails it falls back to SPI NOR — the **stock FNIRSI firmware is still in SPI
    flash**, which is the recovery of last resort.
-2. **pecostm32's `fnirsi_1014d_startup`** runs: clocks → DRAM → caches → display init →
-   UART1 (key controller) → FPGA init → **`fpga_check_ready()` spins until the FPGA reports
-   `0x1432`** (see FPGA_NOTES.md — this happens *before* the boot menu, so a different FPGA
-   version bricks everything below) → backlight on (`0x78`).
+2. **`bootloader_1014d`** runs: clocks → DRAM → caches → display init →
+   UART1 (key controller) → FPGA init → **bounded `fpga_check_ready()` accepts
+   `0x1432` or `0x1532`** → backlight on (`0x78`). If all retries fail, it goes directly
+   to FEL, without waiting for a key. The old binary waited forever for `0x1432` here.
 3. **Key-hold boot menu**: at power-up the key controller returns 49 when idle and **0 when
    any extra button is held**. If 0: the loader shows three choices and waits —
    **F1 = "new PECO firmware"** (SD), **F2 = "original FNIRSI firmware"** (SPI flash
@@ -27,6 +32,8 @@ toolchain, same source).
    `flashfilepacker … -l 0x8000` packaging.
 
 **This loader keeps dual-boot with the stock firmware** (F2 path reads it from SPI NOR).
+F2 does not restore the FPGA flash; stock CPU firmware is not a verified fallback with
+a custom FPGA. Restore the stock FPGA externally when required.
 
 ## There is NO persistent boot-config byte in this chain
 
@@ -108,7 +115,17 @@ machine level. If the byte contract is ever ported to the 1014D loader, redeclar
   `dd if=fnirsi_101xd.bin of=<usb-disk> bs=1024 seek=8` re-flashes the whole boot image.
 - **FEL**: hold a key at power-on → F3, then
   `sunxi-fel -p write 0x7FFFFFE0 fnirsi_101xd_scope.bin exe 0x80000000` (unpacked scope bin).
-- Last resort: remove SD → BROM boots the stock firmware from SPI NOR.
+- Last resort on the stock FPGA: remove SD → BROM boots the stock firmware from SPI NOR.
+  With a custom FPGA, reverting only the CPU firmware does not restore stock hardware behavior.
+
+### Installing the dual-FPGA loader
+
+Install the current **packed** `fnirsi_1014d.bin`, not just the scope-only FEL image.
+The new loader is inside that SD image at the existing location, with the application
+still at sector 80. No repartitioning or FPGA write is part of this change. Follow the
+root README's backup/migration requirements, then the stock-FPGA acceptance checks in
+`bootloader_1014d/README.md` before replacing the FPGA. The application splash and
+its timing are unchanged; the loader's key-held F1/F2/F3 menu is a separate screen.
 
 ## Atlan4's bootloader source (partial) — lineage confirmed
 
@@ -154,8 +171,9 @@ clone):
   references — CONFIRMED.* Earlier
   loaders (fw0.02–0.04, and pecostm32's `fnirsi_1014d_startup`) call it live and hang
   before their boot menus.
-- **Our 1014D chain is NOT covered**: `bootloader_1014d_base.bin` (pecostm32's startup)
-  has the live wait. Patch + rebuild before any new bitstream (item 1 below).
+- **Historical 1014D binary:** the committed `bootloader_1014d_base.bin` has the live
+  wait. The 2026-09-23 source build replaces its use in new packages; existing SD
+  installations still need the new packed image and a loader hardware test.
 - Atlan4's repo also carries a **`bootloader v0.7.bin`** under
   `Guide to firmware/firmware_Atlan_Peco/` (binary only), and its migration readme
   describes the modern chain as bootloader + updater + scope ("fnirsi_1013d_migration
@@ -172,8 +190,9 @@ both facts argue against porting their code wholesale. The sane direction remain
 `fnirsi_1014d_startup` (vendored source, key-driven, dual-boot) and port *features* into it,
 now with fw0.04 as the worked example:
 
-1. **Relax/remove `fpga_check_ready()`** (hard prerequisite for any new FPGA bitstream, and
-   pecostm32's own comment suggests it; also makes boot faster).
+1. **Implemented 2026-09-23:** bounded `fpga_check_ready()` accepts stock/custom AL3,
+   and failure enters FEL. Source is in `bootloader_1014d/`; installation and hardware
+   testing on the stock FPGA are still prerequisites for a custom-FPGA trial.
 2. Optionally **honor the sector-710 boot byte** so the scope-side F1×2/F2 switch becomes
    real; write it via `uint8*`, and populate/validate the staging block before persisting.
 3. Keep the key-hold menu and the SPI-NOR stock fallback exactly as they are.

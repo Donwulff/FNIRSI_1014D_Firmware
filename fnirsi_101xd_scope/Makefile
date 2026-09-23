@@ -70,6 +70,9 @@ build: .build-post
 .build-pre:
 	@echo "Generujem build_time.h s aktuálnym dátumom..."
 	rm -f dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin dist/Debug/GNU_ARM-Linux/fnirsi_1013d*.bin dist/Debug/GNU_ARM-Linux/fnirsi_1014d*.bin
+ifeq ($(VERSION_SUFFIX),-1014D)
+	$(MAKE) -C ../bootloader_1014d
+endif
 	@echo "#ifndef BUILD_TIME_H" > build_time.h
 	@echo "#define BUILD_TIME_H" >> build_time.h
 	@echo "#define COMPILE_YEAR $$(date +%y)" >> build_time.h
@@ -119,14 +122,15 @@ build: .build-post
 #	chmod a+rwx dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin
 
 
-# SD card package: start from the committed bootloader base (SPL + scope loader), then overlay the
+# SD card package: start from the bootloader base (SPL + scope loader), then overlay the
 # freshly-built scope into it so fnirsi_101xd.bin is standalone-bootable and can be dd'd to SD.
 # Two variants:
-#   PORT_1014D (1014D) -> bootloader_1014d_base.bin, overlay at 0x8000
+#   PORT_1014D (1014D) -> source-built ../bootloader_1014d, overlay at 0x8000
 #   !PORT_1014D (1013D) -> bootloader_base.bin (Atlan4 v1.00o5), overlay at 0x5BC00
-	$(eval BOOTLOADER_BASE:=$(shell grep -q 'PORT_1014D 1' port_config.h && echo bootloader_1014d_base.bin || echo bootloader_base.bin))
+	$(eval BOOTLOADER_BASE:=$(shell grep -q 'PORT_1014D 1' port_config.h && echo ../bootloader_1014d/build/bootloader_1014d_base.bin || echo bootloader_base.bin))
 	$(eval BOOTLOADER_OFFSET:=$(shell grep -q 'PORT_1014D 1' port_config.h && echo 0x8000 || echo 0x5BC00))
-	@echo ">>> BOOTLOADER: $(BOOTLOADER_BASE) at offset $(BOOTLOADER_OFFSET)"
+	@echo ">>> BOOTLOADER: $(notdir $(BOOTLOADER_BASE)) at offset $(BOOTLOADER_OFFSET)"
+	@echo ">>> BOOTLOADER SOURCE: $(BOOTLOADER_BASE)"
 	python3 ../tools/check_sd_layout.py dist/Debug/GNU_ARM-Linux/fnirsi_101xd_scope.bin $(BOOTLOADER_BASE) $(BOOTLOADER_OFFSET)
 	cp $(BOOTLOADER_BASE) dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin
 	./flashfilepacker -o dist/Debug/GNU_ARM-Linux/fnirsi_101xd.bin -i dist/Debug/GNU_ARM-Linux/fnirsi_101xd_scope.bin -l $(BOOTLOADER_OFFSET)
