@@ -15,6 +15,15 @@ No RTOS, no libc (`-nostdlib`). Built with `arm-none-eabi-gcc`.
 - **`BOOT_NOTES.md`** — boot chain, SD sector map, loader contracts (the 1014D loader has NO persistent boot byte), self-update/recovery paths, bootloader migration assessment.
 - **`ROADMAP.md`** — proposed improvements/refactors/features (suggestions, dated 2026-07-09).
 
+## Commit workflow
+
+Commit completed features and fixes by default, without waiting for another request.
+Prefer one logical commit per feature/fix, including its tests and relevant documentation.
+Run the applicable checks first; record hardware verification as pending when it has not
+been performed rather than leaving finished code uncommitted until a bench session.
+Stage only the intended source, tests and docs. Do not include generated binaries,
+screenshots, bench/test data, or unrelated user changes.
+
 ## Build
 
 ```bash

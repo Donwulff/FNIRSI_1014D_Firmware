@@ -139,6 +139,13 @@ clobbering — but the trees remain build-nothing-here provenance references).
   for corrections.
 - **`PORT_A.md`** — historical reconstruction of the superseded first-generation port.
 
+## Commit workflow
+
+Follow AGENTS.md's commit workflow: commit completed features/fixes by default, preferably
+one logical commit per change, with tests and relevant docs. Record pending hardware
+verification explicitly. Keep generated binaries, bench/test data and unrelated changes
+out of commits.
+
 ## Building
 
 Requires `arm-none-eabi-gcc`. NetBeans-generated makefiles; config `Debug` is the ARM target
