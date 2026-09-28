@@ -6,6 +6,11 @@
 Atlan4's 1013D fork v1.00o5, authored largely via opencode ("Big Pickle") and documented in
 `AGENTS.md`.
 
+**2026-09-29 bench update:** section 5h records a positive zero residual in PECOS
+A0.002 as well as this port. The older F30 observation that PECOS reads zero is not
+reliable as a current discriminator. F27's environmental-EMI attribution remains a
+hypothesis, not an established cause of either noise or DC offset.
+
 ## Method
 
 Four trees were cross-compared file-by-file and hunk-by-hunk:
@@ -870,6 +875,37 @@ does not verify the final compensated zero. This is a limitation, not proof of t
 reported residual's cause. The reported stock-firmware smoothing is an observation;
 no stock filtering implementation was verified or copied. Further comparisons need
 matching clock, timebase, coupling, range and probe settings; F30 stays open.
+
+**Same-session PECOS comparison:** the user FEL-loaded a binary displaying
+`V A0.002` and observed +70.0 mV Vavg at 500 mV/div, with rapidly changing Vpp
+estimated at about 250 mV. The sawtooth was not prominent. This contradicts using
+the earlier PECOS-near-zero recollection as evidence of a port-specific defect;
+it does not prove either firmware is correctly calibrated. Whether Base calibration
+was repeated in PECOS for this comparison is not yet confirmed. The user reports
+that the lower edge of the noise appears near zero in both versions, the front-end
+shields are removed, and the setup was powered from the programming laptop in the
+preceding report. No separate-supply or shields-refitted result has been reported.
+
+**Calibration code check:** both versions sum raw ADC samples and integer-divide
+by the per-ADC sample count. `scope_do_channel_calibration()` uses ADC1 means at
+DAC settings 500 and 1200 to estimate the DAC setting for mean 128, averages results
+from two sample rates, then measures the ADC2-minus-ADC1 mean at a third rate to
+derive interleave compensation. It does not calibrate to the sample minimum.
+The read path clips at ADC codes 0/255, not at the displayed 0 V (code 128).
+Integer truncation can leave a positive residual: an illustrative ideal transfer
+`mean = 128 + (860 - DAC) / 3.85` gives DAC 857 with the shared arithmetic, leaving
++0.779 ADC counts even with identical ADCs and no drift. This is a mathematical
+example, not a measurement or an explanation of the full observed offset. Neither
+version closes calibration by verifying and correcting the final compensated mean
+under normal acquisition conditions. A final measured-zero correction is a candidate
+improvement; no calibration change has been made on this evidence.
+
+**Display observation:** PECOS refreshes visibly much faster, but its rapidly changing
+statistics are difficult to read. The user prefers our slower numeric updates.
+The current port still calls `ui_update_measurements()` every rendered trace frame;
+there is no independent statistics refresh timer. Any future frame-rate work should
+allow fast traces with slower numeric updates. No frame-rate measurements or
+performance fix are claimed here.
 
 ## 6. Reproduction appendix
 

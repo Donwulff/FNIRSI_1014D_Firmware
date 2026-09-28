@@ -83,6 +83,16 @@ image. Writing the packed image first destroys any remaining legacy calibration 
 range; data already overwritten by previous images requires a backup or recalibration.
 Later configuration writes also recheck the reserved space before writing.
 
+**PECOS comparison firmware (2026-09-29):** the original 1014D firmware uses raw
+sector **700** for settings and writes defaults there at startup if its settings
+are invalid. That sector overlaps the current port's application. A FEL load only
+places the program in RAM; the running old firmware can still overwrite the normal
+SD image. Enter FEL using the normal card, then swap to a spare FAT32 card (partition
+starting at sector 2048 or later) before executing PECOS. It uses separate calibration
+on that card. Power off and restore the normal card after testing. The existing local
+`V A0.002` rebuild is under the vendor scope's `dist/Debug/GNU_ARM-Linux/`; the author's
+committed scope binary predates it (2024-05-21). Neither reference tree needs rebuilding.
+
 | Sector | Contents | Reader/writer |
 |---|---|---|
 | 16 (byte 8192) | SPL + loader image (dd target `seek=8 bs=1024`) | BROM |
