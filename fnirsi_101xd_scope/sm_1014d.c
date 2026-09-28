@@ -2803,6 +2803,10 @@ static void sm_do_clock_auto_search(void)
 
   //Close the whole menu stack; the search summary lingers on screen inside the call above
   sm_close_menu();
+
+  //The summary extends into the measurement sidebar, beyond the trace blit. Rebuild
+  //the full screen so its background and labels are restored as well as the values.
+  ui_setup_main_screen();
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------

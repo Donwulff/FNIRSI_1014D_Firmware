@@ -843,6 +843,34 @@ Loading only the scope via FEL does not exercise or replace the installed loader
 The custom FPGA remains untested, with timing/analog and external-programmer recovery
 requirements unchanged. F2 cannot restore the FPGA flash. No flashing was performed.
 
+## 5h. 2026-09-29 clock-search redraw and grounded-input observations
+
+**F36 — Auto search leaves grey behind the lower measurement slots (bench report;
+fixed in code, hardware verification pending).** The search paints a status rectangle
+at `(380,275,380,130)`, reaching x=759. `sm_close_menu()` only redraws the outline;
+subsequent trace blits stop at x=706 and sidebar updates repaint only the value fields.
+The status background therefore survives behind labels and between fields. The search
+exit now calls `ui_setup_main_screen()` after closing the menu stack, rebuilding the
+whole background and measurement labels. Capture/scoring behavior is unchanged.
+Check on hardware: run Sampling clock → Auto search, let the summary expire, and
+confirm that all measurement backgrounds, labels and borders return to normal.
+Validation: all five host regression tests passed (including both variant harnesses),
+and the 1014D build passed with `bootloader_1014d_base.bin` at offset `0x8000`.
+
+**F30 follow-up — residual zero remains unresolved.** With the probe tip looped to
+ground, the user reports about 17 Vpp / +4.3 Vavg at 50 V/div and up to 360 mVpp /
++114 mVavg at 500 mV/div. Calibration used disconnected probes, as the UI requests.
+Channel, timebase, probe multiplier and sampling clock were not recorded in the
+initial report. Conditional on ×10 and live acquisition, the existing conversion
+tables map both peak-to-peak readings to ten ADC counts; the averages imply about
++2.5 and +3.1 counts relative to midscale. The lowest range uses software ×2 zoom.
+Thus the large voltages alone do not establish a scaling bug. Calibration currently
+accepts an integer ADC1 mean of 125–131 before its compensation/recentring step and
+does not verify the final compensated zero. This is a limitation, not proof of the
+reported residual's cause. The reported stock-firmware smoothing is an observation;
+no stock filtering implementation was verified or copied. Further comparisons need
+matching clock, timebase, coupling, range and probe settings; F30 stays open.
+
 ## 6. Reproduction appendix
 
 ```bash
