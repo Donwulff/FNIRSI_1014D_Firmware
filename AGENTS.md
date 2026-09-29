@@ -152,10 +152,16 @@ Set `PORT_A_KEYDEBUG 1` in `port_config.h` for:
 
 ## Display architecture (double-buffering)
 
-**1014D roll path (2026-09-20):** `scope_get_long_timebase_data()` only samples, with a
-nonblocking timer. `scope_display_long_trace_data()` rebuilds the current sweep into
-scratch, composites the same overlays, and copies the P14 trace rectangle. File views
-suppress roll sampling and rendering. The 1013D's original roll path is unchanged.
+**1014D roll path (updated 2026-09-29):** `scope_get_long_timebase_data()` only samples,
+with a nonblocking timer. Horizontal position follows elapsed milliseconds, preserving
+fractional intervals; a late loop records one actual sample at its current position.
+`scope_display_long_trace_data()` rebuilds the current sweep from samples and their
+stored x positions, draws `ui_draw_grid()` (never the touch grid/scrollbar), composites
+overlays, and copies the P14 trace rectangle. `scope_preset_values()` resets the roll
+clock and point history. File views suppress roll sampling and rendering; stopped time
+is excluded on resume. The 1013D's original roll path is unchanged. In short mode, the
+1014D main loop owns rendering after key handling; `scope_acquire_trace_data()` must not
+also render a frame (that doubled drawing and display averaging).
 
 Two framebuffers, both 768000 bytes (800×480×2):
 - `maindisplaybuffer` — `uint32[SCREEN_SIZE/2]`, cast to `uint16*` for pixel access. The visible framebuffer read by the LCD controller.

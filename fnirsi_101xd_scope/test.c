@@ -825,43 +825,89 @@ void scope_get_long_timebase_data1(void)
 //----------------------------------------------------------------------------------------------------------------------------------
 
 #if PORT_1014D
+//Roll samples are read live, so a late main-loop pass cannot recover the missed
+//samples. Keep the actual samples and their elapsed-time positions separately.
+static uint16 roll_x_positions[3000];
+static uint32 roll_points;
+static uint32 roll_capture_pixels;
+static uint8 roll_clock_running;
+
+void scope_reset_long_timebase(void)
+{
+  roll_points = 0;
+  roll_capture_pixels = 0;
+  roll_clock_running = 0;
+}
+
 void scope_get_long_timebase_data(void)
 {
   static const uint32 delays[] = { 1000, 400, 200, 100, 40, 20, 10 };
-  uint32 now, delay;
+  uint32 now, delay, steps, position;
 
   if(!scopesettings.runstate || scopesettings.waveviewmode ||
      (!enablesampling && !ui_menu_composite_active()))
+  {
+    //Resume from the displayed position, excluding time spent stopped/in file view.
+    roll_clock_running = 0;
     return;
+  }
 
-  if(!triggerlong && scopesettings.triggermode)
-    scope_check_long_trigger();
   if(!triggerlong)
-    return;
+  {
+    roll_clock_running = 0;
+    if(scopesettings.triggermode)
+      scope_check_long_trigger();
+    if(!triggerlong)
+      return;
+  }
 
   delay = delays[scopesettings.timeperdiv < 7 ? scopesettings.timeperdiv : 6];
   now = timer0_get_ticks();
-  //Do not block key handling between samples at slow timebases.
-  if((uint32)(now - previoustimerticks) < delay)
-    return;
-  previoustimerticks = now;
+  if(!roll_clock_running)
+  {
+    previoustimerticks = now;
+    roll_clock_running = 1;
+    steps = 1;
+  }
+  else
+  {
+    //Preserve both elapsed pixels and the fractional interval. One pixel per loop
+    //made a 500ms/div sweep take minutes when rendering/polling exceeded 10ms.
+    steps = (uint32)(now - previoustimerticks) / delay;
+    if(!steps)
+      return;
+    previoustimerticks += steps * delay;
+  }
 
-  if(scopesettings.count >= 3000)
+  //Keep the existing 3000-pixel capture span for NORMAL/SINGLE, timed by the
+  //clock rather than the number of main-loop passes. Do not collect a late sample
+  //and label it as belonging to a capture that has already ended.
+  if(scopesettings.triggermode &&
+     (roll_capture_pixels >= 3000 || steps > 3000 - roll_capture_pixels))
   {
     if(scopesettings.triggermode == 1)
     {
       scopesettings.runstate = RUN_STATE_STOPPED;
       triggerlong = 0;
+      roll_clock_running = 0;
       scope_run_stop_text();
-      return;
     }
-    if(scopesettings.triggermode == 2)
-    {
+    else
       scope_preset_values();
-      return;
-    }
-    scopesettings.count = 0;
+    return;
   }
+  if(scopesettings.triggermode)
+    roll_capture_pixels += steps;
+
+  //The trace spans x=7..704 (698 pixels, 50 pixels/div). A delayed pass can
+  //cross one or more screen boundaries; only retain points from the current sweep.
+  position = scopesettings.xpos - 7 + steps - 1;
+  if(position >= 698)
+    roll_points = 0;
+  position %= 698;
+
+  if(scopesettings.count >= 3000)
+    scopesettings.count = 0;
 
   fpga_arm_long_timebase_cycle();
   if(scopesettings.channel1.enable)
@@ -869,9 +915,10 @@ void scope_get_long_timebase_data(void)
   if(scopesettings.channel2.enable)
     scopesettings.channel2.tracebuffer[scopesettings.count] = fpga_average_trace_data(&scopesettings.channel2);
 
-  if(scopesettings.xpos > 704)
-    scopesettings.xpos = 7;
-  scopesettings.lastx = scopesettings.xpos++;
+  scopesettings.lastx = position + 7;
+  scopesettings.xpos = scopesettings.lastx + 1;
+  roll_x_positions[scopesettings.count] = scopesettings.lastx;
+  roll_points++;
   scopesettings.count++;
   disp_first_sample = scopesettings.count;
   disp_have_trigger = 1;
@@ -879,7 +926,7 @@ void scope_get_long_timebase_data(void)
 
 void scope_display_long_trace_data(void)
 {
-  uint32 channel, x, index, points;
+  uint32 channel, point, x, previousx, index;
   int32 previous, sample;
   PCHANNELSETTINGS settings;
 
@@ -889,24 +936,27 @@ void scope_display_long_trace_data(void)
   display_set_screen_buffer(displaybuffertmp);
   display_set_fg_color(BLACK_COLOR);
   display_fill_rect(2, 48, 705, 432);
-  scope_draw_grid();
+  ui_draw_grid();
 
-  //Rebuild the current sweep from the 3000-sample circular buffer. Menus can
-  //reuse the scratch buffer without destroying the trace beneath them.
-  points = scopesettings.xpos >= 7 && scopesettings.xpos <= 705 ? scopesettings.xpos - 7 : 0;
+  //Rebuild from actual samples and their timed positions. Menus may reuse the
+  //scratch buffer. Lines interpolate between observations; no missed ADC readings
+  //are invented to catch up after a slow frame.
   for(channel = 0; channel < 2; channel++)
   {
     settings = channel ? &scopesettings.channel2 : &scopesettings.channel1;
-    if(!settings->enable || !points)
+    if(!settings->enable || !roll_points)
       continue;
-    index = (scopesettings.count + 3000 - points) % 3000;
+    index = (scopesettings.count + 3000 - roll_points) % 3000;
     previous = scope_get_y_sample(settings, index);
+    previousx = roll_x_positions[index];
     display_set_fg_color(settings->color);
-    for(x = 7; x < 7 + points; x++)
+    for(point = 0; point < roll_points; point++)
     {
+      x = roll_x_positions[index];
       sample = scope_get_y_sample(settings, index);
-      display_draw_line(x - 1, previous, x, sample);
+      display_draw_line(previousx, previous, x, sample);
       previous = sample;
+      previousx = x;
       index = (index + 1) % 3000;
     }
   }

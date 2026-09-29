@@ -44,6 +44,7 @@ class FirmwareTests(unittest.TestCase):
             "scope_reset_config_data", "scope_sanitize_fpga_sample_settings",
             "scope_save_config_data", "scope_restore_config_data",
             "scope_restore_setup_from_file", "scope_save_configuration_data",
+            "scope_acquire_trace_data",
         ]
         port = [
             "scope_config_layout_valid", "scope_config_sector_valid",
@@ -64,8 +65,11 @@ class FirmwareTests(unittest.TestCase):
                         "ui_display_vavg", "ui_prepare_setup_for_file",
                         "ui_restore_setup_from_file", "ui_check_waveform_file"))
                     functions.append(function("fpga_control.c", "fpga_do_conversion"))
+                    source = (SCOPE / "test.c").read_text()
+                    functions.append(source[source.index("//Roll samples are read live"):source.index("void scope_reset_long_timebase(void)")])
                     functions.extend(function("test.c", name) for name in (
-                        "scope_get_long_timebase_data", "scope_display_long_trace_data"))
+                        "scope_reset_long_timebase", "scope_get_long_timebase_data",
+                        "scope_display_long_trace_data"))
                 functions.extend(function("scope_functions.c", name) for name in common)
                 (temporary / "firmware_functions.inc").write_text("\n".join(functions))
                 executable = temporary / ("test-" + str(variant))

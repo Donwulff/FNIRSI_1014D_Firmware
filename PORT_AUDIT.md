@@ -907,6 +907,53 @@ there is no independent statistics refresh timer. Any future frame-rate work sho
 allow fast traces with slower numeric updates. No frame-rate measurements or
 performance fix are claimed here.
 
+## 5i. 2026-09-29 slow timebase display fix
+
+**F37 — Roll sweep advances with loop count, draws touch chrome; sweep mode renders
+twice (fixed in code, hardware verification pending).** The user reports sluggish
+updates at 100 ms/div and larger, with a 500 ms/div refresh taking minutes and leaving
+display artifacts in our firmware. At 500 ms/div the roll sampler imposed a minimum
+10 ms delay but advanced only one pixel per main-loop pass and reset its deadline to
+the current tick. Rendering and blocking key polling therefore stretched the time
+axis whenever a pass exceeded that interval. The roll renderer also called the
+1013D `scope_draw_grid()`, which draws the touch scrollbar and `~` glyphs across the
+1014D bottom status area. Separately, short-mode acquisition rendered a whole frame
+before the 1014D main loop rendered it again after key handling.
+
+The roll sampler now advances by elapsed intervals and preserves the fractional
+remainder. It stores each actual observation's x position alongside the circular
+sample buffer; the renderer connects those observations and discards the preceding
+sweep at the screen boundary. Missed intervals do not cause repeated FPGA reads
+pretending to recover historical samples. The intended horizontal scale is 50 pixels
+per division: a 698-pixel AUTO sweep at 500 ms/div spans 6.98 seconds, plus visibility
+latency until the next frame. Sampling density and visible frame rate still depend on
+loop throughput. STOP/full-screen pauses and trigger waiting do not consume roll
+time; resetting the acquisition also resets its timing history. NORMAL/SINGLE retain
+the existing 3000-pixel capture span, now measured by time rather than loop count.
+The x-position history serves the live roll display; the existing waveform file
+format does not store these positions, so saved roll timing remains a limitation.
+
+Roll rendering now uses `ui_draw_grid()` with the existing scratch-buffer compositing.
+Short-mode acquisition leaves rendering to the 1014D main loop, eliminating the
+duplicate frame and duplicate display averaging. The 1013D rendering contract is
+unchanged. At 100/200 ms/div the port still uses sweep acquisition, so this change
+removes redundant drawing but does not eliminate the FPGA capture duration. No
+independent statistics refresh timer or measured frame-rate improvement is claimed.
+
+Validation: all five host regression tests passed, including both variant harnesses
+with UBSan. New checks cover every roll timebase, delayed and fractional intervals,
+multiple screen wraps, circular-buffer wraps, menu compositing, STOP/resume, timer
+wrap, timebase reset, trigger waiting and NORMAL/SINGLE completion. They also verify
+that roll calls the P14 grid and short acquisition only draws on the 1013D variant.
+The 1014D ARM build and SD layout check passed; the selected bootloader is
+`bootloader_1014d_base.bin` at `0x8000`.
+
+Hardware checks: in AUTO at 500 ms/div, time a sweep (about seven seconds), check the
+bottom status area, and exercise main/channel menus and RUN/STOP. Repeat at 1 s/div
+and check NORMAL/SINGLE completion/rearming with a suitable slow signal. Compare
+100/200 ms/div updates separately; the original several-minute report was not an
+instrumented frame-rate measurement.
+
 ## 6. Reproduction appendix
 
 ```bash

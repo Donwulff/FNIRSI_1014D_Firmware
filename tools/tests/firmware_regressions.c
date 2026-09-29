@@ -26,6 +26,7 @@ static uint32 arms, triggered_arms, fail_arm, done_calls, readouts, dumps;
 static uint32 ticks, tick_step = 1000, long_timebase_calls;
 static uint16 *draw_buffer;
 static uint32 visible_lines, scratch_lines, blits, composites, overlay;
+static uint32 legacy_grids, port_grids, last_line_x, acquisition_draws;
 static int short_write, close_failure, opens, closes, saved, timed_out, missing_average;
 
 int32 sd_card_read(uint32 sector, uint32 blocks, uint8 *buffer)
@@ -56,7 +57,12 @@ void scope_calculate_sample_range_properties(void) {}
 void scope_check_long_trigger(void) {}
 void scope_run_stop_text(void) {}
 void scope_run_stop_button(int mode) {}
-void scope_draw_grid(void) {}
+void scope_draw_grid(void) { legacy_grids++; }
+void ui_draw_grid(void) { port_grids++; }
+void scope_display_trace_data(void) { acquisition_draws++; }
+void scope_process_trigger(uint32 count) {}
+void scope_do_50_percent_trigger_setup(void) {}
+void fpga_set_trigger_level(void) {}
 void scope_draw_pointers(void) {}
 void scope_draw_time_cursors(void) {}
 void scope_draw_volt_cursors(void) {}
@@ -84,6 +90,8 @@ void display_copy_rect_to_screen(uint32 x, uint32 y, uint32 w, uint32 h)
 void display_draw_line(uint32 x, uint32 y, uint32 x2, uint32 y2)
 {
   assert(x >= 6 && x2 <= 704);
+  assert(x <= x2);
+  last_line_x = x2;
   if(draw_buffer == (uint16 *)maindisplaybuffer) visible_lines++;
   else scratch_lines++;
 }
@@ -125,6 +133,9 @@ void fpga_set_time_base(uint32 t) {}
 void fpga_set_long_timebase(uint32 t) { long_timebase_calls++; }
 void fpga_set_trigger_mode(void) {}
 uint8 fpga_done_conversion(void) { done_calls++; return !fail_arm || arms < fail_arm; }
+#if !PORT_1014D
+void fpga_do_conversion(void) { arms++; }
+#endif
 void fpga_read_sample_data(PCHANNELSETTINGS s, uint32 t) { readouts++; }
 uint16 fpga_prepare_for_transfer(void) { return 123; }
 void fpga_dump_ring(uint8 c, uint16 p, uint8 *b, uint32 n) { dumps++; }
@@ -152,6 +163,23 @@ static void reset(void)
   opens = closes = close_failure = short_write = saved = timed_out = 0;
   ticks = 0;
   tick_step = 1000;
+  legacy_grids = port_grids = acquisition_draws = 0;
+  visible_lines = scratch_lines = blits = composites = overlay = last_line_x = 0;
+}
+
+static void test_acquisition_rendering(void)
+{
+  reset();
+  scopesettings.runstate = RUN_STATE_RUNNING;
+  scopesettings.display_data_done = 1;
+  touchstate = 0;
+  scope_acquire_trace_data();
+  assert(arms == 1 && readouts == 2);
+#if PORT_1014D
+  assert(acquisition_draws == 0); //The main loop owns the frame after key handling.
+#else
+  assert(acquisition_draws == 1); //Retain the original 1013D rendering contract.
+#endif
 }
 
 static void test_movespeed(void)
@@ -231,52 +259,155 @@ static void test_storage(void)
   assert(disk_writes == before + 1);
 }
 
-static void test_roll(void)
+static void start_roll(uint32 timebase)
 {
   reset();
-  scopesettings.runstate = 1;
+  tick_step = 0;
+  scopesettings.runstate = RUN_STATE_RUNNING;
   scopesettings.long_mode = 1;
-  scopesettings.timeperdiv = 6;
+  scopesettings.timeperdiv = timebase;
   enablesampling = enabletracedisplay = 1;
+  overlay = 0;
   scope_preset_values();
   assert(draw_buffer == (uint16 *)maindisplaybuffer);
+}
+
+static void test_roll(void)
+{
+  //The horizontal scale must remain 50 pixels/div even if a frame misses many
+  //sample deadlines. Test every supported roll scale with fractional intervals.
+  const uint32 division_ms[] = {50000, 20000, 10000, 5000, 2000, 1000, 500};
+  for(uint32 timebase = 0; timebase < 7; timebase++)
+  {
+    start_roll(timebase);
+    uint32 pixel_ms = division_ms[timebase] / 50;
+    scope_get_long_timebase_data();
+    assert(scopesettings.lastx == 7 && scopesettings.count == 1);
+    ticks += 23 * pixel_ms + pixel_ms / 2;
+    scope_get_long_timebase_data();
+    assert(scopesettings.lastx == 30 && scopesettings.count == 2);
+    ticks += pixel_ms / 2;
+    scope_get_long_timebase_data();
+    assert(scopesettings.lastx == 31 && scopesettings.count == 3);
+    assert(readouts == 6); //Three actual observations, no synthetic catch-up reads.
+    scope_display_long_trace_data();
+    assert(last_line_x == 31 && port_grids == 1 && legacy_grids == 0);
+    assert(visible_lines == 0 && blits == 1);
+
+    ticks = 698 * pixel_ms;
+    scope_get_long_timebase_data();
+    scope_display_long_trace_data();
+    assert(scopesettings.lastx == 7 && scopesettings.count == 4);
+    assert(roll_points == 1 && last_line_x == 7);
+    ticks += (3 * 698 + 45) * pixel_ms;
+    scope_get_long_timebase_data();
+    scope_display_long_trace_data();
+    assert(scopesettings.lastx == 52 && roll_points == 1);
+  }
+
+  //Screen and sample-buffer wraps are independent. Repainting must use valid
+  //indices and monotonically increasing x positions within the current sweep.
+  start_roll(6);
   for(int i = 0; i < 6100; i++)
   {
+    ticks = i * 10;
     scope_get_long_timebase_data();
     uint32 previous = scratch_lines;
     scope_display_long_trace_data();
     assert(scratch_lines > previous);
+    assert(last_line_x == 7 + i % 698);
   }
-  assert(blits == 6100 && visible_lines == 0); //First sweep, screen wrap and buffer wrap.
+  assert(blits == 6100 && port_grids == 6100 && legacy_grids == 0);
+  assert(visible_lines == 0 && scopesettings.count == 100);
+
+  //Full-screen views suppress sampling/rendering, while overlay menus composite
+  //over the trace. Returning from a full-screen view does not include paused time.
   enablesampling = enabletracedisplay = 0;
   uint32 previous = readouts;
+  uint32 previous_x = scopesettings.lastx;
   scope_get_long_timebase_data();
   scope_display_long_trace_data();
   assert(readouts == previous && blits == 6100);
+  ticks += 60000;
   overlay = 1;
   scope_get_long_timebase_data();
   scope_display_long_trace_data();
   assert(readouts == previous + 2 && composites == 1 && blits == 6101);
+  assert(scopesettings.lastx == previous_x + 1);
   overlay = 0;
   enablesampling = enabletracedisplay = 1;
-  scopesettings.timeperdiv = 0;
-  tick_step = 0;
-  ticks = previoustimerticks + 999;
+
+  //A stopped trace can still be repainted after scratch is reused by a menu.
+  scopesettings.runstate = RUN_STATE_STOPPED;
+  scope_get_long_timebase_data();
   previous = readouts;
+  previous_x = scopesettings.lastx;
+  ticks += 60000;
+  scope_display_long_trace_data();
+  assert(readouts == previous && last_line_x == previous_x);
+  scopesettings.runstate = RUN_STATE_RUNNING;
+  scope_get_long_timebase_data();
+  assert(scopesettings.lastx == previous_x + 1);
+
+  //Reset after a timebase change must discard the old sweep and clock origin.
+  scopesettings.timeperdiv = 0;
+  scope_preset_values();
+  scope_get_long_timebase_data();
+  assert(scopesettings.lastx == 7 && roll_points == 1);
+  previous = readouts;
+  ticks += 999;
   scope_get_long_timebase_data();
   assert(readouts == previous);
   ticks++;
   scope_get_long_timebase_data();
-  assert(readouts == previous + 2);
-  previoustimerticks = 0xFFFFFF00;
-  ticks = previoustimerticks + 1000;
+  assert(readouts == previous + 2 && scopesettings.lastx == 8);
+
+  //Unsigned tick subtraction also handles the 49-day millisecond timer wrap.
+  start_roll(6);
+  ticks = 0xFFFFFFF0;
   scope_get_long_timebase_data();
-  assert(readouts == previous + 4); //Timer wrap.
-  scopesettings.count = 3000;
-  scopesettings.triggermode = 1;
-  ticks += 1000;
+  ticks += 40;
   scope_get_long_timebase_data();
-  assert(scopesettings.runstate == RUN_STATE_STOPPED);
+  assert(scopesettings.lastx == 11 && scopesettings.count == 2);
+
+  //Waiting for a trigger does not consume the capture time. SINGLE finishes by
+  //elapsed time even with very sparse loop passes, and NORMAL rearms its sweep.
+  for(uint32 mode = 1; mode <= 2; mode++)
+  {
+    start_roll(6);
+    scopesettings.triggermode = mode;
+    scope_preset_values();
+    ticks = 100000;
+    scope_get_long_timebase_data();
+    assert(readouts == 0 && scopesettings.count == 0);
+    triggerlong = 1; //Hardware-trigger mock remains otherwise idle.
+    scope_get_long_timebase_data();
+    assert(scopesettings.lastx == 7);
+    ticks += 29990;
+    scope_get_long_timebase_data();
+    assert(roll_capture_pixels == 3000 && scopesettings.count == 2);
+    previous = readouts;
+    ticks += 10;
+    scope_get_long_timebase_data();
+    assert(readouts == previous && triggerlong == 0);
+    if(mode == 1)
+      assert(scopesettings.runstate == RUN_STATE_STOPPED);
+    else
+      assert(scopesettings.runstate == RUN_STATE_RUNNING && roll_points == 0);
+
+    //A loop delayed past the entire capture must finish without backdating a
+    //new observation into the expired capture.
+    start_roll(6);
+    scopesettings.triggermode = mode;
+    scope_preset_values();
+    triggerlong = 1;
+    scope_get_long_timebase_data();
+    previous = readouts;
+    ticks += 60000;
+    scope_get_long_timebase_data();
+    assert(readouts == previous && triggerlong == 0);
+    assert(scopesettings.runstate == (mode == 1 ? RUN_STATE_STOPPED : RUN_STATE_RUNNING));
+  }
 }
 
 static void test_average(void)
@@ -367,6 +498,7 @@ static void test_probe(void)
 int main(void)
 {
   test_movespeed();
+  test_acquisition_rendering();
 #if PORT_1014D
   test_storage();
   test_roll();

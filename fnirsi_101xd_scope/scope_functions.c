@@ -269,6 +269,7 @@ void scope_adjust_timebase_and_voltdiv (void)
 #if PORT_1014D
     scopesettings.xpos = 7;
     scopesettings.lastx = 6;
+    scope_reset_long_timebase();
     scopesettings.channel1.averagecount = 0;
     scopesettings.channel2.averagecount = 0;
 #else
@@ -912,8 +913,12 @@ void scope_acquire_trace_data(void)
     //flag next conversion for long memory mode
 
   }
+  //The 1014D main loop renders once, after handling keys. Drawing here as well
+  //doubled the rendering cost and applied display averaging twice per pass.
+#if !PORT_1014D
   //Display the trace data
   scope_display_trace_data();
+#endif
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
