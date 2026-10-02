@@ -27,6 +27,10 @@ static uint32 ticks, tick_step = 1000, long_timebase_calls;
 static uint16 *draw_buffer;
 static uint32 visible_lines, scratch_lines, blits, composites, overlay;
 static uint32 legacy_grids, port_grids, last_line_x, acquisition_draws;
+static uint32 draw_channel, conversion_pending;
+static uint8 adc_values[2];
+static uint16 displayed_points[2][698];
+static uint32 scan_head_x;
 static int short_write, close_failure, opens, closes, saved, timed_out, missing_average;
 
 int32 sd_card_read(uint32 sector, uint32 blocks, uint8 *buffer)
@@ -69,8 +73,15 @@ void scope_draw_volt_cursors(void) {}
 void scope_display_cursor_measurements(void) {}
 void timer0_delay(uint32 ms) {}
 uint32 timer0_get_ticks(void) { ticks += tick_step; return ticks; }
-void display_set_fg_color(uint32 c) {}
-void display_fill_rect(uint32 x, uint32 y, uint32 w, uint32 h) {}
+void display_set_fg_color(uint32 c)
+{
+  if(c == CHANNEL1_COLOR) draw_channel = 0;
+  if(c == CHANNEL2_COLOR) draw_channel = 1;
+}
+void display_fill_rect(uint32 x, uint32 y, uint32 w, uint32 h)
+{
+  memset(displayed_points, 0, sizeof(displayed_points));
+}
 void display_set_font(PFONTDATA f) {}
 void display_decimal(uint32 x, uint32 y, int32 v) {}
 void display_text(uint32 x, uint32 y, const char *s)
@@ -89,8 +100,10 @@ void display_copy_rect_to_screen(uint32 x, uint32 y, uint32 w, uint32 h)
 }
 void display_draw_line(uint32 x, uint32 y, uint32 x2, uint32 y2)
 {
-  assert(x >= 6 && x2 <= 704);
+  assert(x >= 7 && x2 <= 704);
   assert(x <= x2);
+  if(scan_head_x) assert(!(x <= scan_head_x && x2 > scan_head_x));
+  displayed_points[draw_channel][x2 - 7] = y2 + 1;
   last_line_x = x2;
   if(draw_buffer == (uint16 *)maindisplaybuffer) visible_lines++;
   else scratch_lines++;
@@ -115,7 +128,11 @@ void ui_update_measurements(void) {}
 void ui_print_value(uint32 y, int32 v, uint32 s, char *d, uint32 sign, int32 res) { shown = v; }
 static void show_clock_test_status(uint8 p, uint32 s, uint32 k, uint8 b, int32 r, int y) {}
 void fpga_arm_long_timebase_cycle(void) {}
-uint16 fpga_average_trace_data(PCHANNELSETTINGS s) { readouts++; return 128; }
+uint16 fpga_average_trace_data(PCHANNELSETTINGS s)
+{
+  readouts++;
+  return adc_values[s == &scopesettings.channel2];
+}
 void fpga_write_cmd(uint8 c) { command = c; }
 void fpga_write_byte(uint8 b)
 {
@@ -132,7 +149,11 @@ void fpga_set_sample_rate(uint32 r) {}
 void fpga_set_time_base(uint32 t) {}
 void fpga_set_long_timebase(uint32 t) { long_timebase_calls++; }
 void fpga_set_trigger_mode(void) {}
-uint8 fpga_done_conversion(void) { done_calls++; return !fail_arm || arms < fail_arm; }
+uint8 fpga_done_conversion(void)
+{
+  done_calls++;
+  return !conversion_pending && (!fail_arm || arms < fail_arm);
+}
 #if !PORT_1014D
 void fpga_do_conversion(void) { arms++; }
 #endif
@@ -156,6 +177,8 @@ static void reset(void)
   scope_reset_config_data();
   scopesettings.channel1.tracebuffer = (uint8 *)channel1tracebuffer;
   scopesettings.channel2.tracebuffer = (uint8 *)channel2tracebuffer;
+  scopesettings.channel1.color = CHANNEL1_COLOR;
+  scopesettings.channel2.color = CHANNEL2_COLOR;
   scopesettings.samplecount = 3000;
   scopesettings.nofsamples = 1500;
   fpgasettings.fw_FPGA = 1;
@@ -165,6 +188,11 @@ static void reset(void)
   tick_step = 1000;
   legacy_grids = port_grids = acquisition_draws = 0;
   visible_lines = scratch_lines = blits = composites = overlay = last_line_x = 0;
+  conversion_pending = scan_head_x = 0;
+  adc_values[0] = adc_values[1] = 128;
+#if PORT_1014D
+  disp_long_mode = 0;
+#endif
 }
 
 static void test_acquisition_rendering(void)
@@ -272,6 +300,14 @@ static void start_roll(uint32 timebase)
   assert(draw_buffer == (uint16 *)maindisplaybuffer);
 }
 
+static uint32 displayed_point_count(uint32 channel)
+{
+  uint32 count = 0;
+  for(uint32 column = 0; column < 698; column++)
+    if(displayed_points[channel][column]) count++;
+  return count;
+}
+
 static void test_roll(void)
 {
   //The horizontal scale must remain 50 pixels/div even if a frame misses many
@@ -298,15 +334,15 @@ static void test_roll(void)
     scope_get_long_timebase_data();
     scope_display_long_trace_data();
     assert(scopesettings.lastx == 7 && scopesettings.count == 4);
-    assert(roll_points == 1 && last_line_x == 7);
+    assert(displayed_point_count(0) == 3 && last_line_x == 31);
     ticks += (3 * 698 + 45) * pixel_ms;
     scope_get_long_timebase_data();
     scope_display_long_trace_data();
-    assert(scopesettings.lastx == 52 && roll_points == 1);
+    assert(scopesettings.lastx == 52 && displayed_point_count(0) == 1);
   }
 
   //Screen and sample-buffer wraps are independent. Repainting must use valid
-  //indices and monotonically increasing x positions within the current sweep.
+  //indices and retain the preceding sweep ahead of the scan.
   start_roll(6);
   for(int i = 0; i < 6100; i++)
   {
@@ -315,7 +351,8 @@ static void test_roll(void)
     uint32 previous = scratch_lines;
     scope_display_long_trace_data();
     assert(scratch_lines > previous);
-    assert(last_line_x == 7 + i % 698);
+    assert(last_line_x == (i < 698 ? 7 + i : 704));
+    assert(displayed_points[0][i % 698] == 129);
   }
   assert(blits == 6100 && port_grids == 6100 && legacy_grids == 0);
   assert(visible_lines == 0 && scopesettings.count == 100);
@@ -344,7 +381,7 @@ static void test_roll(void)
   previous_x = scopesettings.lastx;
   ticks += 60000;
   scope_display_long_trace_data();
-  assert(readouts == previous && last_line_x == previous_x);
+  assert(readouts == previous && displayed_points[0][previous_x - 7] == 129);
   scopesettings.runstate = RUN_STATE_RUNNING;
   scope_get_long_timebase_data();
   assert(scopesettings.lastx == previous_x + 1);
@@ -353,7 +390,8 @@ static void test_roll(void)
   scopesettings.timeperdiv = 0;
   scope_preset_values();
   scope_get_long_timebase_data();
-  assert(scopesettings.lastx == 7 && roll_points == 1);
+  scope_display_long_trace_data();
+  assert(scopesettings.lastx == 7 && displayed_point_count(0) == 1);
   previous = readouts;
   ticks += 999;
   scope_get_long_timebase_data();
@@ -393,7 +431,25 @@ static void test_roll(void)
     if(mode == 1)
       assert(scopesettings.runstate == RUN_STATE_STOPPED);
     else
-      assert(scopesettings.runstate == RUN_STATE_RUNNING && roll_points == 0);
+      assert(scopesettings.runstate == RUN_STATE_RUNNING && roll_capture_pixels == 0);
+    scope_display_long_trace_data();
+    assert(displayed_point_count(0) == 1 && displayed_points[0][2999 % 698] == 129);
+    if(mode == 2)
+    {
+      //Keep the completed capture throughout trigger waiting and replace it
+      //progressively once another trigger arrives.
+      ticks += 10000;
+      scope_get_long_timebase_data();
+      assert(readouts == previous);
+      triggerlong = 1;
+      adc_values[0] = 140;
+      scope_get_long_timebase_data();
+      scan_head_x = 7;
+      scope_display_long_trace_data();
+      scan_head_x = 0;
+      assert(displayed_points[0][0] == 141);
+      assert(displayed_points[0][2999 % 698] == 129);
+    }
 
     //A loop delayed past the entire capture must finish without backdating a
     //new observation into the expired capture.
@@ -408,6 +464,109 @@ static void test_roll(void)
     assert(readouts == previous && triggerlong == 0);
     assert(scopesettings.runstate == (mode == 1 ? RUN_STATE_STOPPED : RUN_STATE_RUNNING));
   }
+}
+
+static void test_roll_retention(void)
+{
+  start_roll(6);
+  adc_values[0] = 90;
+  adc_values[1] = 110;
+  for(uint32 i = 0; i < 698; i++)
+  {
+    ticks = i * 10;
+    scope_get_long_timebase_data();
+  }
+  scope_display_long_trace_data();
+  assert(displayed_point_count(0) == 698 && displayed_point_count(1) == 698);
+
+  adc_values[0] = 170;
+  adc_values[1] = 190;
+  ticks += 10;
+  scope_get_long_timebase_data();
+  scan_head_x = 7;
+  scope_display_long_trace_data();
+  assert(displayed_points[0][0] == 171 && displayed_points[1][0] == 191);
+  for(uint32 i = 1; i < 698; i++)
+  {
+    assert(displayed_points[0][i] == 91);
+    assert(displayed_points[1][i] == 111);
+  }
+
+  //A slow frame expires the passed columns but keeps the untouched tail. The
+  //renderer may interpolate between actual new observations, never across sweeps.
+  ticks += 230;
+  scope_get_long_timebase_data();
+  scan_head_x = 30;
+  scope_display_long_trace_data();
+  assert(displayed_point_count(0) == 676);
+  assert(displayed_points[0][0] == 171 && displayed_points[0][23] == 171);
+  for(uint32 i = 1; i < 23; i++) assert(displayed_points[0][i] == 0);
+  assert(displayed_points[0][24] == 91 && displayed_points[0][697] == 91);
+
+  //The display cache must survive capture-buffer reuse, STOP and overlay redraw.
+  memset(channel1tracebuffer, 128, sizeof(channel1tracebuffer));
+  memset(channel2tracebuffer, 128, sizeof(channel2tracebuffer));
+  scopesettings.runstate = RUN_STATE_STOPPED;
+  scope_get_long_timebase_data();
+  overlay = 1;
+  scope_display_long_trace_data();
+  assert(displayed_points[0][0] == 171 && displayed_points[0][697] == 91);
+  assert(displayed_points[1][0] == 191 && displayed_points[1][697] == 111);
+  overlay = 0;
+
+  //Leaving roll for 200 ms/div must retain the roll display while the FPGA is
+  //busy. Only an actual completed readout switches display ownership to sweep.
+  scopesettings.runstate = RUN_STATE_RUNNING;
+  scopesettings.long_mode = 0;
+  scopesettings.timeperdiv = 11;
+  scopesettings.display_data_done = 1;
+  scope_preset_values();
+  conversion_pending = 1;
+  uint32 previous = readouts;
+  scope_acquire_trace_data();
+  assert(disp_long_mode == 1 && readouts == previous);
+  scope_display_long_trace_data();
+  assert(displayed_points[0][0] == 171 && displayed_points[0][697] == 91);
+  scope_acquire_trace_data();
+  assert(disp_long_mode == 1 && arms == 1);
+  conversion_pending = 0;
+  scope_acquire_trace_data();
+  assert(disp_long_mode == 0 && readouts == previous + 2);
+  scan_head_x = 0;
+
+  //A disabled channel must not inherit unmeasured samples on a later sweep.
+  start_roll(6);
+  scopesettings.channel2.enable = 0;
+  scope_get_long_timebase_data();
+  scopesettings.channel2.enable = 1;
+  ticks += 10;
+  scope_get_long_timebase_data();
+  scope_display_long_trace_data();
+  assert(displayed_point_count(0) == 2 && displayed_point_count(1) == 1);
+  assert(displayed_points[1][0] == 0 && displayed_points[1][1] == 129);
+
+  //NORMAL can finish partway across the screen. Its old break must survive
+  //ahead of the next scan, as well as the break after the new sample at x=7.
+  start_roll(6);
+  scopesettings.triggermode = 2;
+  scope_preset_values();
+  triggerlong = 1;
+  for(uint32 i = 0; i < 3000; i++)
+  {
+    ticks = i * 10;
+    scope_get_long_timebase_data();
+  }
+  scan_head_x = scopesettings.lastx;
+  ticks += 10;
+  scope_get_long_timebase_data();
+  scope_display_long_trace_data();
+  assert(displayed_point_count(0) == 698);
+  triggerlong = 1;
+  adc_values[0] = 190;
+  scope_get_long_timebase_data();
+  scope_display_long_trace_data();
+  assert(displayed_point_count(0) == 698 && displayed_points[0][0] == 191);
+  scan_head_x = 0;
 }
 
 static void test_average(void)
@@ -502,6 +661,7 @@ int main(void)
 #if PORT_1014D
   test_storage();
   test_roll();
+  test_roll_retention();
   test_average();
   test_clock();
   test_probe();

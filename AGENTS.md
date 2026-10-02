@@ -152,14 +152,20 @@ Set `PORT_A_KEYDEBUG 1` in `port_config.h` for:
 
 ## Display architecture (double-buffering)
 
-**1014D roll path (updated 2026-09-29):** `scope_get_long_timebase_data()` only samples,
+**1014D roll path (updated 2026-10-02):** `scope_get_long_timebase_data()` only samples,
 with a nonblocking timer. Horizontal position follows elapsed milliseconds, preserving
 fractional intervals; a late loop records one actual sample at its current position.
-`scope_display_long_trace_data()` rebuilds the current sweep from samples and their
-stored x positions, draws `ui_draw_grid()` (never the touch grid/scrollbar), composites
-overlays, and copies the P14 trace rectangle. `scope_preset_values()` resets the roll
-clock and point history. File views suppress roll sampling and rendering; stopped time
-is excluded on resume. The 1013D's original roll path is unchanged. In short mode, the
+`scope_display_long_trace_data()` rebuilds the display from a per-column sample cache,
+retaining the preceding sweep ahead of the scan and replacing only passed columns.
+Validity and line-break flags prevent fabricated samples and connections between sweeps.
+It draws `ui_draw_grid()` (never the touch grid/scrollbar), composites overlays, and copies
+the P14 trace rectangle. `scope_preset_values()` resets the roll clock and cache; NORMAL
+rearming retains the completed display while waiting for its next trigger. File views
+suppress live roll sampling and rendering; stopped time is excluded on resume.
+`disp_long_mode` keeps the cached roll trace visible after switching to short acquisition
+until a completed short readout clears it, avoiding the false flat trace at 200 ms/div.
+100/200 ms/div still wait for complete FPGA captures; no partial-buffer readout is used.
+The 1013D's original roll path is unchanged. In short mode, the
 1014D main loop owns rendering after key handling; `scope_acquire_trace_data()` must not
 also render a frame (that doubled drawing and display averaging).
 

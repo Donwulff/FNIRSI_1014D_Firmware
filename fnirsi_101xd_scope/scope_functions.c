@@ -907,6 +907,11 @@ void scope_acquire_trace_data(void)
     //scope_process_trigger(scopesettings.nofsamples); 
     scope_process_trigger(fpgasettings.settriggerpoint); //1500
     //disp_have_trigger = 0;
+
+#if PORT_1014D
+    //A complete short capture can now replace the retained roll display.
+    disp_long_mode = 0;
+#endif
     
     //flag data displayed, 1-for next conversion ready
     scopesettings.display_data_done = 1; 
@@ -3524,6 +3529,13 @@ void scope_display_trace_data(void)
   //Don't draw if a menu is active, except for overlay menus that are composited over the traces
 #if PORT_1014D
   if((!enabletracedisplay) && (!ui_menu_composite_active())) return;
+  //Use the same capture display for main-loop and menu-requested redraws. A roll
+  //buffer is not a completed short capture, even after the timebase has changed.
+  if((scopesettings.long_mode || disp_long_mode) && !scopesettings.waveviewmode)
+  {
+    scope_display_long_trace_data();
+    return;
+  }
 #else
   if(!enabletracedisplay) return;
 #endif

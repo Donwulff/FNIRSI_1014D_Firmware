@@ -826,23 +826,27 @@ void scope_get_long_timebase_data1(void)
 
 #if PORT_1014D
 //Roll samples are read live, so a late main-loop pass cannot recover the missed
-//samples. Keep the actual samples and their elapsed-time positions separately.
-static uint16 roll_x_positions[3000];
-static uint32 roll_points;
+//samples. Cache actual observations by screen column, independently of the capture
+//buffer. The previous sweep stays ahead of the scan until that column is passed.
+#define ROLL_WIDTH 698
+#define ROLL_TRACE_BREAK 4
+static uint8 roll_display_samples[2][ROLL_WIDTH];
+static uint8 roll_display_valid[ROLL_WIDTH]; //Channel bits 0/1, incoming line break bit 2.
 static uint32 roll_capture_pixels;
 static uint8 roll_clock_running;
 
 void scope_reset_long_timebase(void)
 {
-  roll_points = 0;
+  memset(roll_display_valid, 0, sizeof(roll_display_valid));
   roll_capture_pixels = 0;
   roll_clock_running = 0;
+  disp_long_mode = 1;
 }
 
 void scope_get_long_timebase_data(void)
 {
   static const uint32 delays[] = { 1000, 400, 200, 100, 40, 20, 10 };
-  uint32 now, delay, steps, position;
+  uint32 now, delay, steps, position, column;
 
   if(!scopesettings.runstate || scopesettings.waveviewmode ||
      (!enablesampling && !ui_menu_composite_active()))
@@ -893,32 +897,54 @@ void scope_get_long_timebase_data(void)
       scope_run_stop_text();
     }
     else
-      scope_preset_values();
+    {
+      //Rearm NORMAL without clearing its completed trace. The next triggered
+      //capture starts at the left and progressively replaces the display cache.
+      triggerlong = 0;
+      roll_capture_pixels = 0;
+      roll_clock_running = 0;
+      scopesettings.xpos = 7;
+      scopesettings.lastx = 6;
+      scopesettings.count = 0;
+    }
     return;
   }
   if(scopesettings.triggermode)
     roll_capture_pixels += steps;
 
-  //The trace spans x=7..704 (698 pixels, 50 pixels/div). A delayed pass can
-  //cross one or more screen boundaries; only retain points from the current sweep.
-  position = scopesettings.xpos - 7 + steps - 1;
-  if(position >= 698)
-    roll_points = 0;
-  position %= 698;
+  //Erase only columns the scan has passed, including missed sample intervals.
+  //A delay of a full screen or more expires the entire preceding sweep.
+  position = scopesettings.xpos - 7;
+  if(steps >= ROLL_WIDTH)
+    memset(roll_display_valid, 0, sizeof(roll_display_valid));
+  else
+    for(column = 0; column < steps; column++)
+      roll_display_valid[(position + column) % ROLL_WIDTH] = 0;
+  position = (position + steps - 1) % ROLL_WIDTH;
 
   if(scopesettings.count >= 3000)
     scopesettings.count = 0;
 
   fpga_arm_long_timebase_cycle();
   if(scopesettings.channel1.enable)
-    scopesettings.channel1.tracebuffer[scopesettings.count] = fpga_average_trace_data(&scopesettings.channel1);
+  {
+    roll_display_samples[0][position] = fpga_average_trace_data(&scopesettings.channel1);
+    scopesettings.channel1.tracebuffer[scopesettings.count] = roll_display_samples[0][position];
+    roll_display_valid[position] |= 1;
+  }
   if(scopesettings.channel2.enable)
-    scopesettings.channel2.tracebuffer[scopesettings.count] = fpga_average_trace_data(&scopesettings.channel2);
+  {
+    roll_display_samples[1][position] = fpga_average_trace_data(&scopesettings.channel2);
+    scopesettings.channel2.tracebuffer[scopesettings.count] = roll_display_samples[1][position];
+    roll_display_valid[position] |= 2;
+  }
 
   scopesettings.lastx = position + 7;
   scopesettings.xpos = scopesettings.lastx + 1;
-  roll_x_positions[scopesettings.count] = scopesettings.lastx;
-  roll_points++;
+  //Keep the break with the cached trace. A NORMAL rearm may start a new sweep
+  //before the old scan head, so its old discontinuity must survive there too.
+  roll_display_valid[(position + 1) % ROLL_WIDTH] |= ROLL_TRACE_BREAK;
+  disp_long_mode = 1;
   scopesettings.count++;
   disp_first_sample = scopesettings.count;
   disp_have_trigger = 1;
@@ -926,9 +952,9 @@ void scope_get_long_timebase_data(void)
 
 void scope_display_long_trace_data(void)
 {
-  uint32 channel, point, x, previousx, index;
+  uint32 channel, column, x, previousx, have_previous;
   int32 previous, sample;
-  PCHANNELSETTINGS settings;
+  CHANNELSETTINGS settings;
 
   if(!enabletracedisplay && !ui_menu_composite_active())
     return;
@@ -938,26 +964,35 @@ void scope_display_long_trace_data(void)
   display_fill_rect(2, 48, 705, 432);
   ui_draw_grid();
 
-  //Rebuild from actual samples and their timed positions. Menus may reuse the
-  //scratch buffer. Lines interpolate between observations; no missed ADC readings
-  //are invented to catch up after a slow frame.
+  //Menus may reuse scratch, so rebuild both the new trace and the old portion
+  //ahead of the scan. Never join the two sweeps across the scan head.
   for(channel = 0; channel < 2; channel++)
   {
-    settings = channel ? &scopesettings.channel2 : &scopesettings.channel1;
-    if(!settings->enable || !roll_points)
+    settings = channel ? scopesettings.channel2 : scopesettings.channel1;
+    if(!settings.enable)
       continue;
-    index = (scopesettings.count + 3000 - roll_points) % 3000;
-    previous = scope_get_y_sample(settings, index);
-    previousx = roll_x_positions[index];
-    display_set_fg_color(settings->color);
-    for(point = 0; point < roll_points; point++)
+    settings.tracebuffer = roll_display_samples[channel];
+    have_previous = 0;
+    previousx = 0;
+    previous = 0;
+    display_set_fg_color(settings.color);
+    for(column = 0; column < ROLL_WIDTH; column++)
     {
-      x = roll_x_positions[index];
-      sample = scope_get_y_sample(settings, index);
+      if(roll_display_valid[column] & ROLL_TRACE_BREAK)
+        have_previous = 0;
+      if(!(roll_display_valid[column] & (1 << channel)))
+        continue;
+      x = column + 7;
+      sample = scope_get_y_sample(&settings, column);
+      if(!have_previous)
+      {
+        previousx = x;
+        previous = sample;
+      }
       display_draw_line(previousx, previous, x, sample);
+      have_previous = 1;
       previous = sample;
       previousx = x;
-      index = (index + 1) % 3000;
     }
   }
 

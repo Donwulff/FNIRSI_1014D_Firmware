@@ -1193,6 +1193,9 @@ extern int32 disp_first_sample;
 extern uint32 AVG_trigger;
 extern uint32 AVG_trigger1;
 extern uint32 disp_have_trigger;
+#if PORT_1014D
+extern uint32 disp_long_mode;
+#endif
 extern uint32 disp_trigger_index;
 
 extern int32 disp_xstart;

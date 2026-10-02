@@ -250,6 +250,10 @@ int32 disp_first_sample;
 //uint32 AVG_trigger=128;
 //uint32 AVG_trigger1=128;
 uint32 disp_have_trigger;
+#if PORT_1014D
+//The last displayed capture remains roll data until a short capture completes.
+uint32 disp_long_mode;
+#endif
 uint32 disp_trigger_index;            //Trigger point in the sample buffers
 
 int32 disp_xstart;

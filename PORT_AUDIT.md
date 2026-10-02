@@ -954,6 +954,52 @@ and check NORMAL/SINGLE completion/rearming with a suitable slow signal. Compare
 100/200 ms/div updates separately; the original several-minute report was not an
 instrumented frame-rate measurement.
 
+## 5j. 2026-10-02 retain the trace during slow acquisition
+
+**F38 — Roll clears at wrap; returning to 200 ms/div displays an unfilled capture
+buffer (fixed in code, hardware verification pending).** Following F37, the user
+reports no major visual glitches. Remaining issues: a completed roll sweep disappears at its boundary,
+and switching from roll to 200 ms/div initially shows a flat line. The first comes
+from F37 explicitly discarding the preceding sweep. The second comes from selecting
+the short renderer immediately: the roll capture buffer contains sparse observations
+and its unused portion is still filled with 128, which is not a completed short capture.
+
+The 1014D roll path now caches actual raw observations by screen column, separately
+from the circular capture buffer. Only columns passed by the scan are invalidated;
+the preceding sweep stays ahead of it. Per-channel validity bits distinguish measured
+values from empty columns, and cached line breaks prevent connections between old
+and new sweeps, including an earlier discontinuity retained after NORMAL rearms.
+Delayed frames still take one actual observation at the elapsed-time position;
+interpolation joins observations within a sweep, without fabricating catch-up readings.
+A delay spanning an entire screen expires its old contents. STOP and overlay redraw
+retain the cache. NORMAL rearms without clearing the completed display; explicit
+timebase resets still clear the roll history. The cache uses 2094 bytes in place of
+F37's 6000-byte x-position array.
+
+Display mode now follows the available capture through the roll-to-short transition:
+`disp_long_mode` keeps the cached roll trace visible until
+`scope_acquire_trace_data()` completes a short readout. Waveform file view continues
+to use its own renderer. Main-loop and menu-requested redraws both select the capture
+display through `scope_display_trace_data()`. The held trace retains its old horizontal placement while
+the timebase label already shows the newly requested setting.
+
+500 ms/div and slower continue to sample and display live. At 100/200 ms/div the
+driver checks FPGA completion (`0x0A`) before reading the trigger address and sample
+buffers. There is no verified partial-capture readout/progress path in this driver;
+this fix does not change FPGA commands, extend roll to faster settings, or claim that
+progressive buffered acquisition is impossible. The existing roll waveform-file timing
+limitation remains: neither column timing nor the display cache is serialized.
+
+Validation: all five host tests pass, including both firmware variants with UBSan.
+Coverage includes distinct old/new channel values across wrap, delayed-frame expiry,
+cache survival after capture-buffer reuse, disabled-channel validity, STOP and overlay
+redraws, retained NORMAL completion/retrigger discontinuities, and a busy-to-complete
+roll-to-short transition. The 1014D ARM build and SD layout check pass with
+`bootloader_1014d_base.bin` at `0x8000`. Hardware checks pending: at 500 ms/div and 1 s/div, confirm
+the preceding trace remains ahead of the scan and is replaced progressively; exercise
+NORMAL trigger waiting/rearming and RUN/STOP; switch from roll to 200 ms/div and verify
+the old trace stays until the first completed short capture, without the flat-line flash.
+
 ## 6. Reproduction appendix
 
 ```bash

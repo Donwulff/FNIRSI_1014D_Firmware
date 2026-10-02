@@ -453,10 +453,7 @@ int main(void)
     sm_handle_user_input();
     if(enabletracedisplay || ui_menu_composite_active())
     {
-      if(scopesettings.long_mode && !scopesettings.waveviewmode)
-        scope_display_long_trace_data();
-      else
-        scope_display_trace_data();
+      scope_display_trace_data();
     }
 #else
     //1013D: handle the touch panel input
