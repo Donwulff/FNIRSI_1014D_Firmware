@@ -276,9 +276,10 @@ custom FPGA timing/constraints remain separate development projects.
 
 F30's grounded-input residual remains unresolved. The 2026-09-29 PECOS A0.002 comparison
 also showed a positive residual, superseding the earlier near-zero recollection. Both
-calibration implementations omit final compensated-zero verification/correction; that is
-an improvement candidate, not an established cause. See PORT_AUDIT.md §5h before changing
-calibration. F35's one-shot offset jump remains unreproduced. The F25 sawtooth and its
+versions originally omitted final compensated-zero verification/correction. The 1014D
+now has that step (2026-10-16, PORT_AUDIT.md §5l); assess its measured residuals before
+further zero-level changes. It does not establish the cause of F30. See §5h for the
+comparison evidence. F35's one-shot offset jump remains unreproduced. The F25 sawtooth and its
 roll-command follow-up are implemented fixes, not open calibration work.
 
 The 1013D variant is deliberately kept at Atlan4 behavior except for documented shared

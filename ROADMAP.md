@@ -14,13 +14,15 @@ port; this was a status reconciliation and targeted code check, not a new exhaus
 1. **Nonblocking UART poll (item 4) implemented 2026-10-16.** One outstanding request,
    20 ms retries, no transmit/receive busy-waits, and pending commands preserved.
    Hardware acceptance pending; modal confirmation screens still wait for a key.
-2. **Automate the existing host checks and both ARM builds (item 9), then reduce
-   warnings (item 5).** Host regressions exist and pass; GitHub CI does not exist.
+2. **Automate the existing host checks and both ARM builds (item 9).** Host regressions
+   exist and pass; GitHub CI does not exist. Warning cleanup (item 5) is deferred by
+   user preference to reduce upstream merge churn.
    Keep variant artifacts isolated and finish local builds with 1014D selected.
 3. **Calibration/measurement improvements (items 21–22).** Final compensated-zero
-   verification/correction is absent in both this port and PECOS. Integer Vrms precision
-   also remains limited. The latest PECOS comparison does not establish a port-specific
-   zero-offset regression; see §5h before reopening the old A/B hypothesis.
+   verification/correction implemented for 1014D on 2026-10-16 (PORT_AUDIT §5l).
+   Assess that step before further F30 zero-level changes, which are deferred.
+   Integer Vrms precision remains limited. The latest PECOS comparison does not establish
+   a port-specific zero-offset regression; see §5h before reopening the old A/B hypothesis.
 4. **Optional instrument features:** noise averaging/persistence (25), PC capture/control
    (13), AWG (14), and accurate serialization of roll sample timing (12). These are
    separate features, not missing pieces of the September fixes.
@@ -211,7 +213,8 @@ The numbered sections below preserve the development history; newer status notes
 22. **Zero a shorted channel in Base calibration (F30).** The residual remains unresolved.
     The 2026-09-29 PECOS A0.002 comparison also showed a positive residual, superseding
     the earlier PECOS-near-zero recollection. Both implementations truncate intermediate
-    calibration averages and omit a final compensated-mean verification/correction.
+    calibration averages. The 1014D final compensated-mean verification/correction is now
+    implemented (2026-10-16, PORT_AUDIT §5l); assess its effect before further zero-level work.
     That is a concrete improvement candidate, not proof of the observed offset's cause
     or proof that the residual is entirely hardware. See PORT_AUDIT.md §5h.
 23. **Guard disabled-channel measurements (F29).** `ui_display_measurements` draws every slot

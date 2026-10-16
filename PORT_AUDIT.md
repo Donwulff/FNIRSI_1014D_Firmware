@@ -1017,6 +1017,36 @@ their behavior while acquisition continues between UART requests.
 Validation: all ten host regressions pass; the 1014D ARM build and SD layout check
 pass with `bootloader_1014d_base.bin` at offset `0x8000`.
 
+## 5l. 2026-10-16 final compensated-zero calibration step
+
+After the existing raw-ADC calibration and interleave compensation/recentring,
+the 1014D now verifies each of the six hardware ranges using the normal compensated
+sample sum (not the truncated integer average). It uses the selected sweep rate,
+capture length and Si5351 clock; a selected roll timebase uses a 2MSa/s sweep instead,
+because roll averaging has a different data path. Each measurement discards four
+settling captures and averages eight. A residual outside ±0.5 ADC count produces
+a symmetrically rounded DAC correction using the measured offset slope; up to three
+corrections are permitted, each followed by a fresh measurement. Residuals above eight
+counts, invalid slopes/counts, DAC requests outside the tested 500–1200 range, or a
+one-second verification capture timeout fail calibration (`FAIL 3`). No compensation
+values are changed by this step. Range 6 continues to share hardware range 5.
+
+The diagnostic panel adds `z1 mADC`/`z2 mADC`, six residuals per channel in thousandths
+of an ADC count, in hardware-range order. Successful values are within ±500; zero
+entries after an early failure may be unmeasured. A failure on either channel retains
+both channels' previous calibration, including a CH2 failure after CH1 succeeded.
+Returning from calibration also restores FPGA roll mode if it was selected.
+
+This closes a calibration validation gap; it does not establish the cause of F30 or
+claim to solve the full grounded-input residual. Its wider investigation remains deferred.
+The 1013D calibration algorithm is unchanged. Validation: synthetic analog-transfer tests
+run the actual final-pass and both-channel calibration functions with UBSan, covering
+fractional positive/negative residuals, odd interleave differences, repeated DAC failure,
+invalid measurements/slopes, excessive residual, timeout/timer wrap and failure rollback.
+All eleven host regressions and the 1014D ARM build/SD layout check pass. Hardware
+verification pending: repeat Base calibration, record z1/z2 and Vavg for matching ranges,
+then check persistence across reboot. Existing probe-disconnect instructions still apply.
+
 ## 6. Reproduction appendix
 
 ```bash

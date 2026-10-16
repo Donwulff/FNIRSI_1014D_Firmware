@@ -1003,6 +1003,7 @@ static int32 caldbg_hdiff[2][6];
 //means a structural error the offset comp cannot represent
 static uint32 caldbg_res[2];
 static uint32 caldbg_peak[2];
+static int32 caldbg_zero[2][6]; //Final compensated residual, in thousandths of an ADC count.
 
 void uart1_wait_for_user_input(void);
 #endif
@@ -1013,6 +1014,9 @@ uint32 scope_do_baseline_calibration(void)
   uint32 voltperdiv;
   uint8 backup_invert_ch1;
   uint8 backup_invert_ch2;
+#if PORT_1014D
+  CHANNELSETTINGS backup_channel1 = scopesettings.channel1;
+#endif
   //uint8 backup_samplerate;
   //uint8 backup_timeperdiv; 
 
@@ -1155,6 +1159,17 @@ uint32 scope_do_baseline_calibration(void)
   scopesettings.samplecount = fpgasettings.totalsamples;//SAMPLE_COUNT;
   scopesettings.nofsamples = fpgasettings.totalsamples/2;
 
+#if PORT_1014D
+  //A failure on CH2 must not leave a partial CH1 calibration to be saved later.
+  if(!flag)
+  {
+    memcpy(scopesettings.channel1.dc_calibration_offset, backup_channel1.dc_calibration_offset,
+           sizeof(scopesettings.channel1.dc_calibration_offset));
+    scopesettings.channel1.adc1compensation = backup_channel1.adc1compensation;
+    scopesettings.channel1.adc2compensation = backup_channel1.adc2compensation;
+  }
+#endif
+
   //Load the normal operation settings back into the FPGA
   fpga_set_channel_voltperdiv(&scopesettings.channel1);
   fpga_set_channel_offset(&scopesettings.channel1);
@@ -1166,6 +1181,10 @@ uint32 scope_do_baseline_calibration(void)
   //it per arm (pecostm32 did, Atlan4 moved it to the fw>1 reset window), so without this
   //the ~2MSa/s cal value would linger until the next timebase change (REVIEW-2026-08-21)
   fpga_set_time_base(scopesettings.timeperdiv);
+#if PORT_1014D
+  if(scopesettings.long_mode)
+    fpga_set_long_timebase(scopesettings.timeperdiv);
+#endif
   
   //Show the new settings
   scope_acqusition_settings(0);
@@ -1187,7 +1206,7 @@ uint32 scope_do_baseline_calibration(void)
   //One data class per line: the old two line layout ran the residual into the peak
   //column as soon as either went past two digits (display_decimal is left aligned)
   display_set_fg_color(DARKGREY_COLOR);
-  display_fill_rect(380, 268, 320, 62);
+  display_fill_rect(380, 268, 320, 90);
   display_set_fg_color(COLOR_WHITE);
   display_set_font(&font_1);
   display_text(384, 270, "cal data - press any key");
@@ -1209,6 +1228,13 @@ uint32 scope_do_baseline_calibration(void)
   {
     display_decimal(412 + (i * 32), 304, caldbg_hdiff[0][i]);
     display_decimal(412 + (i * 32), 315, caldbg_hdiff[1][i]);
+  }
+  display_text(384, 328, "z1 mADC:");
+  display_text(384, 341, "z2 mADC:");
+  for(int i = 0; i < 6; i++)
+  {
+    display_decimal(450 + (i * 40), 328, caldbg_zero[0][i]);
+    display_decimal(450 + (i * 40), 341, caldbg_zero[1][i]);
   }
   uart1_wait_for_user_input();
 #endif
@@ -1291,6 +1317,72 @@ static void interleave_settle(PCHANNELSETTINGS s, uint32 frames)
   }
 }
 
+//Bound the final verification's capture waits.
+static uint32 calibration_read_frame(PCHANNELSETTINGS settings)
+{
+  uint32 start = timer0_get_ticks();
+  fpga_do_conversion();
+  while(!fpga_done_conversion())
+    if((uint32)(timer0_get_ticks() - start) >= 1000)
+      return 0;
+  fpga_read_sample_data(settings, interleave_runtime_triggerpoint());
+  return settings->averagecount == scopesettings.samplecount;
+}
+
+//Close the loop on the same compensated samples used for Vavg. Keep fractional
+//ADC counts until the final, symmetrically rounded DAC correction. Each changed
+//offset is settled and independently remeasured; no success on a prediction alone.
+static uint32 calibration_verify_zero(PCHANNELSETTINGS settings, uint32 voltperdiv)
+{
+  int32 step = (sampleratedcoffsetstep[0][voltperdiv] +
+                sampleratedcoffsetstep[1][voltperdiv]) / 2;
+  int32 ch = settings->adc1command == 0x20 ? 0 : 1;
+  uint32 attempt, frame, count;
+  int64 residual, correction, divisor;
+  int32 offset;
+
+  if(step <= 0 || !scopesettings.samplecount)
+    return 0;
+
+  settings->samplevoltperdiv = voltperdiv;
+  fpga_set_channel_voltperdiv(settings);
+  fpga_set_channel_offset(settings);
+  timer0_delay(60);
+
+  for(attempt = 0; attempt < 4; attempt++)
+  {
+    for(frame = 0; frame < INTERLEAVE_CAL_WARMUP; frame++)
+      if(!calibration_read_frame(settings)) return 0;
+    residual = 0;
+    count = 0;
+    for(frame = 0; frame < INTERLEAVE_CAL_FRAMES; frame++)
+    {
+      if(!calibration_read_frame(settings)) return 0;
+      residual += (int64)settings->averagesum - (int64)128 * settings->averagecount;
+      count += settings->averagecount;
+    }
+    caldbg_zero[ch][voltperdiv] = residual * 1000 / count;
+    //Half an ADC count allows noise and DAC quantization without accepting the
+    //old +/-3 raw-count window. Reject a large residual rather than hiding it.
+    if(residual >= -(int64)count / 2 && residual <= (int64)count / 2)
+      return 1;
+    if(attempt == 3 || residual < -(int64)count * 8 || residual > (int64)count * 8)
+      return 0;
+
+    divisor = (int64)count << 20;
+    correction = residual * step;
+    correction = correction >= 0 ? (correction + divisor / 2) / divisor :
+                                   -((-correction + divisor / 2) / divisor);
+    offset = settings->dc_calibration_offset[voltperdiv] + correction;
+    if(!correction || offset < HIGH_DC_OFFSET || offset > LOW_DC_OFFSET)
+      return 0;
+    settings->dc_calibration_offset[voltperdiv] = offset;
+    fpga_set_channel_offset(settings);
+    timer0_delay(30);
+  }
+  return 0;
+}
+
 //Signed raw interleave offset for one v/div, in ADC counts: mean(ADC2) - mean(ADC1), averaged
 //----------------------------------------------------------------------------------------------------------------------------------
 #endif
@@ -1304,6 +1396,15 @@ uint32 scope_do_channel_calibration(void)
   int32  lowaverage;
   int32  dcoffsetstep;
   int32  compensationsum = 0;
+
+#if PORT_1014D
+  //CH2 must not inherit CH1's compensation while deriving its raw calibration.
+  calibrationsettings.adc1compensation = 0;
+  calibrationsettings.adc2compensation = 0;
+  calibrationsettings.dcoffset = 0;
+  memset(caldbg_zero[calibrationsettings.adc1command == 0x20 ? 0 : 1], 0,
+         sizeof(caldbg_zero[0]));
+#endif
 
   //Calibrate for the hardware sensitivity settings
   for(voltperdiv=0;voltperdiv<6;voltperdiv++)
@@ -1365,6 +1466,10 @@ uint32 scope_do_channel_calibration(void)
 
       //Calculate the DC offset step for a single ADC bit change for this volt/div setting
       //Low DC offset minus high DC offset (1200 - 500) = 700. Scaled up for fixed point calculation ==> 700 << 20 = 734003200
+#if PORT_1014D
+      if(highaverage <= lowaverage)
+        return 0;
+#endif
       dcoffsetstep = 734003200 / (highaverage - lowaverage);
 
       //Calculate the average DC offset settings for both the low to center as the high to center readings
@@ -1493,6 +1598,44 @@ uint32 scope_do_channel_calibration(void)
     //The DC offset is based on the pre compensated ADC1 reading, so need to adjust with the average DC offset step times the ADC1 compensation value
     calibrationsettings.dc_calibration_offset[voltperdiv] = (int16)calibrationsettings.dc_calibration_offset[voltperdiv] + (((int32)calibrationsettings.adc1compensation * (((int32)sampleratedcoffsetstep[0][voltperdiv] + (int32)sampleratedcoffsetstep[1][voltperdiv]) / 2)) >> 20);
   }
+
+#if PORT_1014D
+  if(flag)
+  {
+    uint8 saved_sr = scopesettings.samplerate;
+    uint8 saved_tp = scopesettings.timeperdiv;
+    uint32 saved_count = scopesettings.samplecount;
+    //Roll's averaging commands use a different data path. Verify at a settled
+    //2MSa/s sweep when roll is selected, otherwise at the selected runtime rate.
+    if(scopesettings.long_mode)
+    {
+      scopesettings.samplerate = 6;
+      scopesettings.timeperdiv = sample_rate_time_per_div[6];
+    }
+    scopesettings.samplecount = fpgasettings.totalsamples;
+    scopesettings.nofsamples = scopesettings.samplecount / 2;
+    fpga_set_sample_rate(scopesettings.samplerate);
+    fpga_set_time_base(scopesettings.timeperdiv);
+    for(voltperdiv = 0; voltperdiv < 6; voltperdiv++)
+      if(!calibration_verify_zero(&calibrationsettings, voltperdiv))
+      {
+        flag = 0;
+        break;
+      }
+    scopesettings.samplerate = saved_sr;
+    scopesettings.timeperdiv = saved_tp;
+    scopesettings.samplecount = saved_count;
+    scopesettings.nofsamples = saved_count / 2;
+    fpga_set_sample_rate(saved_sr);
+    fpga_set_time_base(saved_tp);
+    if(!flag)
+    {
+      display_set_fg_color(RED_COLOR);
+      display_text(455, 255, "FAIL 3");
+      timer0_delay(1500);
+    }
+  }
+#endif
 
   //Return the result of the tests. ZERO (True) if all tests passed
   return(flag);
