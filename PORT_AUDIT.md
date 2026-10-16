@@ -1047,6 +1047,41 @@ All eleven host regressions and the 1014D ARM build/SD layout check pass. Hardwa
 verification pending: repeat Base calibration, record z1/z2 and Vavg for matching ranges,
 then check persistence across reboot. Existing probe-disconnect instructions still apply.
 
+## 5m. 2026-10-16 saved roll timing and cache
+
+The 1014D now writes roll snapshots as version 1.0.0.3, appending the displayed
+698-column cache, per-channel validity, sweep breaks and uint32 millisecond observation
+ticks. Metadata captures the horizontal scale, including a held roll trace after selecting
+a short timebase. Samples missed during a slow loop remain missing; timestamps identify
+actual observations rather than assigning uniform timing to the circular sample buffer.
+Loaded roll files use a separate cache, support horizontal zoom without hardware rearming,
+and restore Vavg from valid observations only. The live cache survives file browsing.
+
+Short waveform writes keep version 1.0.0.2; existing files still load, but timing absent
+from old roll files cannot be reconstructed. The new format represents the displayed
+cache, not every historical circular-buffer observation. `tools/roll_waveform_csv.py`
+exports actual observation times and segments. Full layout, checksum rules, timer-wrap
+limits, clock-vs-display time distinction and older-firmware compatibility are in
+WAVEFORM_FORMAT.md. Inherited thumbnail previews still use their existing trace-point
+format; the versioned waveform payload is authoritative.
+
+Waveform reads/writes check byte counts, extension metadata and checksum; save checks
+close failure. Unsupported versions and read/checksum failures retain the capture and
+thumbnail instead of deleting them. Next/previous browsing makes at most one pass and
+returns to the browser if every capture fails. Previous-item underflow now wraps the
+unsigned index correctly in that path.
+
+Validation: all twelve host regressions pass, including actual firmware save/load helpers,
+full loader and browse/zoom handlers with UBSan. Coverage includes retained sweeps,
+delayed observations, fractional timing, disabled channels, timer wrap, held roll scale,
+live-cache preservation, legacy short loading, corrupt flags/metadata/payload, unknown
+versions, truncation at each section, short writes and bounded failed browsing. Both
+ARM variants build; the 1013D build is isolated in `/tmp` and final local artifacts are
+1014D with `bootloader_1014d_base.bin` at `0x8000` and passing SD-layout validation.
+Hardware verification pending: save/reopen 500ms/div and 1s/div traces with gaps and a
+retained sweep, zoom, export CSV, and compare placement/timestamps. Compiler-warning
+cleanup and the wider F30 zero-level investigation remain deferred by user preference.
+
 ## 6. Reproduction appendix
 
 ```bash

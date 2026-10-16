@@ -828,24 +828,152 @@ void scope_get_long_timebase_data1(void)
 //Roll samples are read live, so a late main-loop pass cannot recover the missed
 //samples. Cache actual observations by screen column, independently of the capture
 //buffer. The previous sweep stays ahead of the scan until that column is passed.
-#define ROLL_WIDTH 698
-#define ROLL_TRACE_BREAK 4
 static uint8 roll_display_samples[2][ROLL_WIDTH];
 static uint8 roll_display_valid[ROLL_WIDTH]; //Channel bits 0/1, incoming line break bit 2.
+static uint32 roll_display_ticks[ROLL_WIDTH];
+static const uint32 roll_delays[] = { 1000, 400, 200, 100, 40, 20, 10 };
+static uint32 roll_timeperdiv;
 static uint32 roll_capture_pixels;
 static uint8 roll_clock_running;
+
+//File viewing must not overwrite the live cache retained while the browser is up.
+static uint8 roll_file_samples[2][ROLL_WIDTH];
+static uint8 roll_file_valid[ROLL_WIDTH];
+static uint32 roll_file_ticks[ROLL_WIDTH];
+static uint32 roll_file_timeperdiv, roll_file_snapshot_ticks;
+static uint8 roll_file_loaded;
+
+uint32 scope_roll_waveform_active(void)
+{
+  return scopesettings.waveviewmode && roll_file_loaded;
+}
+
+void scope_prepare_roll_waveform(void)
+{
+  uint32 column;
+  uint32 *ptr = &viewfilesetupdata[ROLL_FILE_SETTING_OFFSET];
+
+  if(!scope_roll_waveform_active())
+  {
+    if(scopesettings.waveviewmode || (!scopesettings.long_mode && !disp_long_mode))
+      return;
+    memcpy(roll_file_samples, roll_display_samples, sizeof(roll_file_samples));
+    memcpy(roll_file_valid, roll_display_valid, sizeof(roll_file_valid));
+    memcpy(roll_file_ticks, roll_display_ticks, sizeof(roll_file_ticks));
+    roll_file_timeperdiv = roll_timeperdiv;
+    roll_file_snapshot_ticks = timer0_get_ticks();
+    //Canonicalize unmeasured fields instead of exporting stale memory.
+    for(column = 0; column < ROLL_WIDTH; column++)
+    {
+      if(!(roll_file_valid[column] & 1)) roll_file_samples[0][column] = 0;
+      if(!(roll_file_valid[column] & 2)) roll_file_samples[1][column] = 0;
+      if(!(roll_file_valid[column] & 3)) roll_file_ticks[column] = 0;
+    }
+  }
+  viewfilesetupdata[3] = ROLL_WAVEFORM_VERSION;
+  //Use the captured scale even while holding roll after selecting a short base.
+  viewfilesetupdata[TRIGGER_SETTING_OFFSET] = roll_file_timeperdiv;
+  ptr[0] = 0x4C4C4F52; //"ROLL" in little endian.
+  ptr[1] = ROLL_WIDTH;
+  ptr[2] = roll_file_timeperdiv;
+  ptr[3] = roll_delays[roll_file_timeperdiv]; //Milliseconds per display column.
+  ptr[4] = roll_file_snapshot_ticks;
+  ptr[5] = ROLL_FILE_PAYLOAD_SIZE;
+}
+
+uint32 scope_roll_waveform_checksum(void)
+{
+  uint32 i, sum = 0;
+  uint8 *ticks = (uint8 *)roll_file_ticks;
+  for(i = 0; i < sizeof(roll_file_samples); i++) sum += ((uint8 *)roll_file_samples)[i];
+  for(i = 0; i < sizeof(roll_file_valid); i++) sum += roll_file_valid[i];
+  for(i = 0; i < sizeof(roll_file_ticks); i++) sum += ticks[i];
+  return sum;
+}
+
+uint32 scope_check_roll_waveform(void)
+{
+  uint32 i;
+  uint32 *ptr = &viewfilesetupdata[ROLL_FILE_SETTING_OFFSET];
+  if(ptr[0] != 0x4C4C4F52 || ptr[1] != ROLL_WIDTH || ptr[2] > 6 ||
+     ptr[3] != roll_delays[ptr[2]] || ptr[5] != ROLL_FILE_PAYLOAD_SIZE ||
+     viewfilesetupdata[TRIGGER_SETTING_OFFSET] != ptr[2])
+    return 0;
+  for(i = 0; i < ROLL_WIDTH; i++)
+    if(roll_file_valid[i] & ~7) return 0;
+  return 1;
+}
+
+void scope_restore_roll_waveform(void)
+{
+  uint32 channel, column;
+  PCHANNELSETTINGS settings;
+  roll_file_loaded = viewfilesetupdata[3] == ROLL_WAVEFORM_VERSION;
+  if(!roll_file_loaded)
+  {
+    scopesettings.long_mode = scopesettings.timeperdiv < 11;
+    return;
+  }
+  roll_file_timeperdiv = viewfilesetupdata[ROLL_FILE_SETTING_OFFSET + 2];
+  roll_file_snapshot_ticks = viewfilesetupdata[ROLL_FILE_SETTING_OFFSET + 4];
+  scopesettings.long_mode = 1;
+  //Only actual cached observations contribute to the restored average.
+  for(channel = 0; channel < 2; channel++)
+  {
+    settings = channel ? &scopesettings.channel2 : &scopesettings.channel1;
+    settings->averagesum = settings->averagecount = 0;
+    settings->frequencyvalid = 0;
+    for(column = 0; column < ROLL_WIDTH; column++)
+      if(roll_file_valid[column] & (1 << channel))
+      {
+        settings->averagesum += roll_file_samples[channel][column];
+        settings->averagecount++;
+      }
+  }
+}
+
+FRESULT scope_write_roll_waveform(FIL *fp)
+{
+  UINT written;
+  FRESULT result;
+  result = f_write(fp, roll_file_samples, sizeof(roll_file_samples), &written);
+  if(result != FR_OK) return result;
+  if(written != sizeof(roll_file_samples)) return FR_DISK_ERR;
+  result = f_write(fp, roll_file_valid, sizeof(roll_file_valid), &written);
+  if(result != FR_OK) return result;
+  if(written != sizeof(roll_file_valid)) return FR_DISK_ERR;
+  result = f_write(fp, roll_file_ticks, sizeof(roll_file_ticks), &written);
+  if(result != FR_OK) return result;
+  return written == sizeof(roll_file_ticks) ? FR_OK : FR_DISK_ERR;
+}
+
+FRESULT scope_read_roll_waveform(FIL *fp)
+{
+  UINT received;
+  FRESULT result;
+  roll_file_loaded = 0;
+  result = f_read(fp, roll_file_samples, sizeof(roll_file_samples), &received);
+  if(result != FR_OK) return result;
+  if(received != sizeof(roll_file_samples)) return FR_DISK_ERR;
+  result = f_read(fp, roll_file_valid, sizeof(roll_file_valid), &received);
+  if(result != FR_OK) return result;
+  if(received != sizeof(roll_file_valid)) return FR_DISK_ERR;
+  result = f_read(fp, roll_file_ticks, sizeof(roll_file_ticks), &received);
+  if(result != FR_OK) return result;
+  return received == sizeof(roll_file_ticks) ? FR_OK : FR_DISK_ERR;
+}
 
 void scope_reset_long_timebase(void)
 {
   memset(roll_display_valid, 0, sizeof(roll_display_valid));
   roll_capture_pixels = 0;
   roll_clock_running = 0;
+  roll_timeperdiv = scopesettings.timeperdiv < 7 ? scopesettings.timeperdiv : 6;
   disp_long_mode = 1;
 }
 
 void scope_get_long_timebase_data(void)
 {
-  static const uint32 delays[] = { 1000, 400, 200, 100, 40, 20, 10 };
   uint32 now, delay, steps, position, column;
 
   if(!scopesettings.runstate || scopesettings.waveviewmode ||
@@ -865,7 +993,7 @@ void scope_get_long_timebase_data(void)
       return;
   }
 
-  delay = delays[scopesettings.timeperdiv < 7 ? scopesettings.timeperdiv : 6];
+  delay = roll_delays[roll_timeperdiv];
   now = timer0_get_ticks();
   if(!roll_clock_running)
   {
@@ -921,6 +1049,7 @@ void scope_get_long_timebase_data(void)
     for(column = 0; column < steps; column++)
       roll_display_valid[(position + column) % ROLL_WIDTH] = 0;
   position = (position + steps - 1) % ROLL_WIDTH;
+  roll_display_ticks[position] = now;
 
   if(scopesettings.count >= 3000)
     scopesettings.count = 0;
@@ -952,7 +1081,10 @@ void scope_get_long_timebase_data(void)
 
 void scope_display_long_trace_data(void)
 {
+  static const uint32 ms_per_div[] = {50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20};
   uint32 channel, column, x, previousx, have_previous;
+  uint32 from_file = scope_roll_waveform_active();
+  uint8 *valid = from_file ? roll_file_valid : roll_display_valid;
   int32 previous, sample;
   CHANNELSETTINGS settings;
 
@@ -971,18 +1103,22 @@ void scope_display_long_trace_data(void)
     settings = channel ? scopesettings.channel2 : scopesettings.channel1;
     if(!settings.enable)
       continue;
-    settings.tracebuffer = roll_display_samples[channel];
+    settings.tracebuffer = from_file ? roll_file_samples[channel] : roll_display_samples[channel];
     have_previous = 0;
     previousx = 0;
     previous = 0;
     display_set_fg_color(settings.color);
     for(column = 0; column < ROLL_WIDTH; column++)
     {
-      if(roll_display_valid[column] & ROLL_TRACE_BREAK)
+      if(valid[column] & ROLL_TRACE_BREAK)
         have_previous = 0;
-      if(!(roll_display_valid[column] & (1 << channel)))
+      if(!(valid[column] & (1 << channel)))
         continue;
       x = column + 7;
+      if(from_file)
+        x = 7 + column * roll_delays[roll_file_timeperdiv] * 50 /
+                ms_per_div[scopesettings.timeperdiv < 11 ? scopesettings.timeperdiv : roll_file_timeperdiv];
+      if(x > 704) break;
       sample = scope_get_y_sample(&settings, column);
       if(!have_previous)
       {
@@ -1001,6 +1137,8 @@ void scope_display_long_trace_data(void)
   ui_display_waiting_triggered_text(scopesettings.runstate == RUN_STATE_RUNNING ? 0 : 1);
   ui_draw_pointers();
   ui_display_cursors();
+  if(from_file)
+    display_text(555, 70, viewfilename);
   ui_redraw_active_menu();
   display_set_source_buffer(displaybuffertmp);
   display_set_screen_buffer((uint16 *)maindisplaybuffer);

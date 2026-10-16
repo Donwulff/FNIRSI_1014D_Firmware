@@ -3674,7 +3674,8 @@ void scope_display_trace_data(void)
   if((!enabletracedisplay) && (!ui_menu_composite_active())) return;
   //Use the same capture display for main-loop and menu-requested redraws. A roll
   //buffer is not a completed short capture, even after the timebase has changed.
-  if((scopesettings.long_mode || disp_long_mode) && !scopesettings.waveviewmode)
+  if(scope_roll_waveform_active() ||
+     ((scopesettings.long_mode || disp_long_mode) && !scopesettings.waveviewmode))
   {
     scope_display_long_trace_data();
     return;

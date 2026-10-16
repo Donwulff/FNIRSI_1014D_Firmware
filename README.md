@@ -239,7 +239,9 @@ map: `CLAUDE.md` (build/load sections) and `BOOT_NOTES.md`.
 - `fpga/` — a self-contained Anlogic TD project retargeting Atlan4's AL3 replacement-FPGA
   design to the stock 1014D board. **Built, never flashed** — read `fpga/README.md` and
   `FPGA_NOTES.md` before going anywhere near it.
-- `tools/` — capture analyzers, image-layout checks, host regressions and upstream tracking.
+- `tools/` — capture analyzers, roll waveform CSV export, image-layout checks, host
+  regressions and upstream tracking. [WAVEFORM_FORMAT.md](WAVEFORM_FORMAT.md) documents
+  the timestamped roll snapshots and compatibility with older firmware.
 - Docs: `CLAUDE.md` (orientation), `PORT_AUDIT.md` (findings log F1+),
   `FPGA_NOTES.md` (FPGA protocol + capture geometry), `BOOT_NOTES.md` (boot chain +
   loader contracts), `ROADMAP.md` (backlog), `REVIEW-2026-08-21.md` (full review record),

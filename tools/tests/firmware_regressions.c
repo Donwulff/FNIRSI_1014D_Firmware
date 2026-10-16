@@ -32,6 +32,8 @@ static uint8 adc_values[2];
 static uint16 displayed_points[2][698];
 static uint32 scan_head_x;
 static int short_write, close_failure, opens, closes, saved, timed_out, missing_average;
+static uint8 waveform[12000];
+static uint32 waveform_io, waveform_size, waveform_position;
 
 int32 sd_card_read(uint32 sector, uint32 blocks, uint8 *buffer)
 {
@@ -164,9 +166,36 @@ uint32 measure_high_rate_artifact(PCHANNELSETTINGS s, uint32 *p, uint32 a) { *p 
 double clock_synthesizer_apply_sampling_clock(uint8 p)
 { sampling_clock_p1b = p; sampling_clock_scale = 8.0 / (p + 2); return sampling_clock_scale; }
 void uart1_wait_for_user_input(void) {}
-FRESULT f_open(FIL *fp, const TCHAR *name, BYTE mode) { opens++; return FR_OK; }
+void ui_print_file_name(uint32 n) {}
+void ui_setup_main_screen(void) {}
+void ui_display_time_per_division(void) {}
+void ui_display_trigger_horizontal_position(void) {}
+void ui_display_run_stop_text(void) {}
+void ui_display_thumbnails(void) {}
+int32 ui_load_bitmap_data(void) { return VIEW_BITMAP_LOAD_ERROR; }
+void ui_display_file_status_message(int32 m, int32 w) {}
+FRESULT f_open(FIL *fp, const TCHAR *name, BYTE mode)
+{ opens++; waveform_position = 0; return FR_OK; }
 FRESULT f_write(FIL *fp, const void *buf, UINT bytes, UINT *written)
-{ *written = short_write ? 0 : bytes; return FR_OK; }
+{
+  *written = short_write ? 0 : bytes;
+  if(waveform_io)
+  {
+    assert(waveform_position + *written <= sizeof(waveform));
+    memcpy(waveform + waveform_position, buf, *written);
+    waveform_position += *written;
+    waveform_size = waveform_position;
+  }
+  return FR_OK;
+}
+FRESULT f_read(FIL *fp, void *buf, UINT bytes, UINT *received)
+{
+  assert(waveform_io);
+  *received = bytes > waveform_size - waveform_position ? waveform_size - waveform_position : bytes;
+  memcpy(buf, waveform + waveform_position, *received);
+  waveform_position += *received;
+  return FR_OK;
+}
 FRESULT f_close(FIL *fp) { closes++; return closes == close_failure ? FR_DISK_ERR : FR_OK; }
 
 #include "firmware_functions.inc"
@@ -184,6 +213,7 @@ static void reset(void)
   fpgasettings.fw_FPGA = 1;
   arms = triggered_arms = fail_arm = done_calls = readouts = dumps = 0;
   opens = closes = close_failure = short_write = saved = timed_out = 0;
+  waveform_io = waveform_size = waveform_position = 0;
   ticks = 0;
   tick_step = 1000;
   legacy_grids = port_grids = acquisition_draws = 0;
@@ -595,6 +625,127 @@ static void test_average(void)
   assert(scopesettings.channel2.averagecount == 3000);
 }
 
+static void test_roll_waveform(void)
+{
+  start_roll(6);
+  ticks = 0xfffffff0U;
+  adc_values[0] = 90;
+  adc_values[1] = 110;
+  for(uint32 i = 0; i < 698; i++)
+  {
+    scope_get_long_timebase_data();
+    ticks += 10;
+  }
+  //New sweep and a delayed pass: preserve old data, actual times and both breaks.
+  adc_values[0] = 170;
+  adc_values[1] = 190;
+  scope_get_long_timebase_data();
+  ticks += 235;
+  scopesettings.channel2.enable = 0;
+  scope_get_long_timebase_data();
+  scopesettings.channel2.enable = 1;
+  scopesettings.long_mode = 0;
+  scopesettings.timeperdiv = 11; //Held roll still belongs to 500ms/div.
+  ui_prepare_setup_for_file();
+  assert(viewfilesetupdata[3] == ROLL_WAVEFORM_VERSION);
+  assert(viewfilesetupdata[TRIGGER_SETTING_OFFSET] == 6);
+  assert(scope_check_roll_waveform() && ui_check_waveform_file() == 0);
+  assert((uint32)(roll_file_snapshot_ticks - roll_file_ticks[23]) == 0);
+  assert((uint32)(roll_file_ticks[23] - roll_file_ticks[0]) == 235);
+  assert(roll_file_samples[0][0] == 170 && roll_file_samples[0][697] == 90);
+  assert(roll_file_valid[1] == 0 && roll_file_valid[24] == 7);
+  waveform_io = 1;
+  assert(ui_write_waveform_data(&viewfp, viewfilesetupdata, sizeof(viewfilesetupdata)) == FR_OK);
+  assert(ui_write_waveform_data(&viewfp, channel1tracebuffer, 3000) == FR_OK);
+  assert(ui_write_waveform_data(&viewfp, channel2tracebuffer, 3000) == FR_OK);
+  assert(scope_write_roll_waveform(&viewfp) == FR_OK);
+  uint32 full_size = waveform_size;
+  assert(full_size == sizeof(viewfilesetupdata) + 6000 + ROLL_FILE_PAYLOAD_SIZE);
+  //Clobber transient buffers/cache: loading must use the serialized observations.
+  memset(roll_file_samples, 0, sizeof(roll_file_samples));
+  memset(roll_file_valid, 0, sizeof(roll_file_valid));
+  memset(channel1tracebuffer, 128, sizeof(channel1tracebuffer));
+  assert(ui_load_trace_data() == VIEW_TRACE_LOAD_OK);
+  assert(scope_roll_waveform_active() && scopesettings.timeperdiv == 6);
+  assert(scopesettings.long_mode && scopesettings.runstate == RUN_STATE_STOPPED);
+  scope_display_long_trace_data();
+  assert(displayed_points[0][0] == 171 && displayed_points[0][697] == 91);
+  assert(displayed_points[1][0] == 191 && displayed_points[1][697] == 111);
+  assert(displayed_points[0][1] == 0 && displayed_points[0][23] == 171);
+  assert(displayed_points[1][23] == 0 && scopesettings.channel2.averagecount == 675);
+  assert(scopesettings.channel1.averagecount == 676);
+  assert(scopesettings.channel1.averagesum == 170 * 2 + 90 * 674);
+  //Zoom preserves the cache and rescales horizontal placement.
+  uint32 previous_arms = arms, previous_long_calls = long_timebase_calls;
+  setvalue = -1;
+  sm_set_time_base();
+  assert(scopesettings.timeperdiv == 5 && scopesettings.runstate == RUN_STATE_STOPPED);
+  assert(arms == previous_arms && long_timebase_calls == previous_long_calls);
+  scope_display_long_trace_data();
+  assert(displayed_points[0][11] == 171);
+  assert(roll_file_ticks[23] == 7199);
+  //Corrupt flags and data fail checksum; metadata checks run even with a matching sum.
+  roll_file_valid[0] ^= 8;
+  assert(ui_check_waveform_file() != 0);
+  roll_file_valid[0] ^= 8;
+  viewfilesetupdata[ROLL_FILE_SETTING_OFFSET + 1]++;
+  assert(!scope_check_roll_waveform());
+  viewfilesetupdata[ROLL_FILE_SETTING_OFFSET + 1]--;
+  assert(ui_check_waveform_file() == 0);
+  waveform[full_size - 1] ^= 1;
+  uint32 original_version;
+  memcpy(&original_version, waveform + 12, 4);
+  uint32 future_version = 0x01000004;
+  memcpy(waveform + 12, &future_version, 4);
+  assert(ui_load_trace_data() == VIEW_TRACE_LOAD_ERROR);
+  memcpy(waveform + 12, &original_version, 4);
+  assert(ui_load_trace_data() == VIEW_TRACE_LOAD_ERROR);
+  waveform[full_size - 1] ^= 1;
+  //Truncation at every component boundary is an error, even if f_read returns OK.
+  uint32 cuts[] = {1, sizeof(viewfilesetupdata) - 1, sizeof(viewfilesetupdata) + 2999,
+                   sizeof(viewfilesetupdata) + 5999, full_size - 3000, full_size - 1};
+  for(uint32 i = 0; i < sizeof(cuts) / sizeof(cuts[0]); i++)
+  {
+    waveform_size = cuts[i];
+    assert(ui_load_trace_data() == VIEW_TRACE_LOAD_ERROR);
+  }
+  waveform_size = full_size;
+  assert(ui_load_trace_data() == VIEW_TRACE_LOAD_OK);
+  short_write = 1;
+  assert(scope_write_roll_waveform(&viewfp) != FR_OK);
+  assert(ui_write_waveform_data(&viewfp, waveform, 100) != FR_OK);
+  short_write = 0;
+  //The live cache survived file browsing, and legacy short captures still load.
+  scopesettings.waveviewmode = 0;
+  scopesettings.timeperdiv = 6;
+  scope_display_long_trace_data();
+  assert(displayed_points[0][0] == 171 && displayed_points[0][697] == 91);
+  disp_long_mode = 0;
+  scopesettings.long_mode = 0;
+  scopesettings.timeperdiv = 20;
+  ui_prepare_setup_for_file();
+  assert(viewfilesetupdata[3] == WAVEFORM_FILE_VERSION);
+  waveform_position = 0;
+  assert(ui_write_waveform_data(&viewfp, viewfilesetupdata, sizeof(viewfilesetupdata)) == FR_OK);
+  assert(ui_write_waveform_data(&viewfp, channel1tracebuffer, 3000) == FR_OK);
+  assert(ui_write_waveform_data(&viewfp, channel2tracebuffer, 3000) == FR_OK);
+  assert(ui_load_trace_data() == VIEW_TRACE_LOAD_OK && !scope_roll_waveform_active());
+  assert(!scopesettings.long_mode && scopesettings.timeperdiv == 20);
+  //Retained failed files must not make next/previous browse loop forever.
+  waveform_size = 0;
+  viewavailableitems = 3;
+  viewcurrentindex = 0;
+  viewtype = VIEW_TYPE_WAVEFORM;
+  uint32 previous_opens = opens;
+  sm_item_view_goto_next_item();
+  assert(opens == previous_opens + 3 && viewavailableitems == 3);
+  assert(navigationstate == NAV_FILE_VIEW_HANDLING && !enabletracedisplay);
+  previous_opens = opens;
+  sm_item_view_goto_previous_item();
+  assert(opens == previous_opens + 3 && viewcurrentindex == 0);
+  assert(buttondialstate == BUTTON_DIAL_FILE_VIEW_HANDLING);
+}
+
 static void test_clock(void)
 {
   for(int trigger = 0; trigger < 3; trigger++)
@@ -663,6 +814,7 @@ int main(void)
   test_roll();
   test_roll_retention();
   test_average();
+  test_roll_waveform();
   test_clock();
   test_probe();
 #endif

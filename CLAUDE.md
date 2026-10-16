@@ -269,10 +269,16 @@ pending wherever those records say so.
 
 Remaining software limitations: no GitHub CI runs the existing host regressions and
 variant builds; compiler warnings remain noisy;
-roll waveform files omit the display cache/timing; Vrms still loses fractional precision;
+Vrms still loses fractional precision;
 GEN is an empty action and the 1014D UI has no PC-control/CDC entry. Further UI separation
 requires extracting shared helpers first, as described above. MMU/D-cache enablement and
 custom FPGA timing/constraints remain separate development projects.
+
+1014D roll waveform saves now preserve the displayed cache, validity/break flags and
+millisecond observation ticks (v1.0.0.3, 2026-10-16). Loading uses a separate file cache;
+short v1.0.0.2 files remain compatible. Format/export details and older-firmware caveat:
+WAVEFORM_FORMAT.md. Unreadable/unsupported captures are retained; next/previous browsing
+is bounded to one pass before returning to thumbnails.
 
 F30's grounded-input residual remains unresolved. The 2026-09-29 PECOS A0.002 comparison
 also showed a positive residual, superseding the earlier near-zero recollection. Both

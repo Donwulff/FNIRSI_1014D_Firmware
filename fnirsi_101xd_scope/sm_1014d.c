@@ -11,6 +11,7 @@
 #include "clock_synthesizer.h"
 
 #include "variables.h"
+#include "test.h"
 
 #if PORT_1014D
 
@@ -1453,6 +1454,14 @@ void sm_set_time_base(void)
   {
     scopesettings.timeperdiv = newvalue;
 
+    if(scope_roll_waveform_active())
+    {
+      //Zoom the saved columns without rearming hardware or clearing the cache.
+      ui_display_time_per_division();
+      ui_display_trigger_horizontal_position();
+      return;
+    }
+
     //Long/short time base overlap: the 35-entry table has 200ms/100ms/50ms/20ms in BOTH the
     //long-timebase (roll) block (indices 7..10) and the short/sweep block (indices 11..14),
     //so the dial showed e.g. "100ms" twice and the roll rendering (Atlan4 1013D code, glitchy
@@ -2186,6 +2195,7 @@ void sm_item_view_delete_current(void)
 void sm_item_view_goto_next_item(void)
 {
   uint32 retval = 1;
+  uint32 attempts = viewavailableitems;
 
   //Try opening until successful or out of items. Success is based on a return value of zero
   //Out of items can happen when the last file has been deleted with he sm_item_view_delete_current function
@@ -2224,7 +2234,17 @@ void sm_item_view_goto_next_item(void)
       }
     }
   }
-  while(retval && viewavailableitems);
+  while(retval && viewavailableitems && --attempts);
+  if(retval)
+  {
+    //Failed waveform loads retain their files. Return to the browser after one
+    //pass instead of retrying a list of unreadable/unsupported captures forever.
+    navigationstate = NAV_FILE_VIEW_HANDLING;
+    fileviewstate = FILE_VIEW_DEFAULT_CONTROL;
+    buttondialstate = BUTTON_DIAL_FILE_VIEW_HANDLING;
+    enabletracedisplay = TRACE_DISPLAY_NOT_ENABLED;
+    ui_display_thumbnails();
+  }
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -2232,6 +2252,7 @@ void sm_item_view_goto_next_item(void)
 void sm_item_view_goto_previous_item(void)
 {
   uint32 retval = 1;
+  uint32 attempts = viewavailableitems;
 
   //Try opening until successful or out of items. Success is based on a return value of zero
   //Out of items cannot happen here, but still checking on it to be safe
@@ -2241,10 +2262,10 @@ void sm_item_view_goto_previous_item(void)
     viewcurrentindex--;
 
     //Check if it underflows
-    if(viewcurrentindex < 0)
+    if(viewcurrentindex >= viewavailableitems)
     {
       //If so roll over to the last item
-      viewcurrentindex = viewavailableitems - 1;
+      viewcurrentindex = viewavailableitems ? viewavailableitems - 1 : 0;
       viewpage = viewpages;
     }
     //Check if underflow to previous page
@@ -2270,7 +2291,15 @@ void sm_item_view_goto_previous_item(void)
       }
     }
   }
-  while(retval && viewavailableitems);
+  while(retval && viewavailableitems && --attempts);
+  if(retval)
+  {
+    navigationstate = NAV_FILE_VIEW_HANDLING;
+    fileviewstate = FILE_VIEW_DEFAULT_CONTROL;
+    buttondialstate = BUTTON_DIAL_FILE_VIEW_HANDLING;
+    enabletracedisplay = TRACE_DISPLAY_NOT_ENABLED;
+    ui_display_thumbnails();
+  }
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------

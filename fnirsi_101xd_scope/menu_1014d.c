@@ -11,6 +11,7 @@
 #include "scope_functions.h"
 #include "fpga_control.h"
 #include "build_time.h"
+#include "test.h"
 
 #if PORT_1014D
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -3296,6 +3297,11 @@ void ui_prepare_setup_for_file(void)
     ptr[index++] = scopesettings.measurementitems[measurement].index;
   }
 
+  //Roll needs its column cache and timing rather than uniform sample indices.
+  scope_prepare_roll_waveform();
+  if(ptr[3] == ROLL_WAVEFORM_VERSION)
+    checksum += scope_roll_waveform_checksum();
+
   //Calculate a checksum over the settings data
   for(index=1;index<VIEW_NUMBER_OF_SETTINGS;index++)
   {
@@ -3438,6 +3444,8 @@ void ui_restore_setup_from_file(void)
     }
   }
   
+  scope_restore_roll_waveform();
+
   //On a change of sample rate or time per division it is necessary to re calculate the values for determining the number of point to display
   scope_calculate_sample_range_properties();
 }
@@ -3448,6 +3456,12 @@ int32 ui_check_waveform_file(void)
 {
   uint32 index;
   uint32 checksum = 0;
+
+  if(viewfilesetupdata[3] == ROLL_WAVEFORM_VERSION)
+  {
+    if(!scope_check_roll_waveform()) return -1;
+    checksum += scope_roll_waveform_checksum();
+  }
 
   //Calculate a checksum over the settings data
   for(index=1;index<VIEW_NUMBER_OF_SETTINGS;index++)
@@ -3873,6 +3887,14 @@ int32 ui_save_thumbnail_file(void)
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
+static FRESULT ui_write_waveform_data(FIL *fp, const void *data, UINT size)
+{
+  UINT written;
+  FRESULT result = f_write(fp, data, size, &written);
+  if(result != FR_OK) return result;
+  return written == size ? FR_OK : FR_DISK_ERR;
+}
+
 void ui_save_view_item_file(int32 type)
 {
   uint32  newnumber;
@@ -3986,20 +4008,23 @@ void ui_save_view_item_file(int32 type)
       ui_prepare_setup_for_file();
 
       //Write the setup data to the file
-      if((result = f_write(&viewfp, viewfilesetupdata, sizeof(viewfilesetupdata), 0)) == FR_OK)
+      if((result = ui_write_waveform_data(&viewfp, viewfilesetupdata, sizeof(viewfilesetupdata))) == FR_OK)
       {
         //Write the trace data to the file
         //Save the channel 1 raw sample data
-        if((result = f_write(&viewfp, (uint8 *)channel1tracebuffer, 3000, 0)) == FR_OK)
+        if((result = ui_write_waveform_data(&viewfp, (uint8 *)channel1tracebuffer, 3000)) == FR_OK)
         {
           //Save the channel 2 raw sample data
-          result = f_write(&viewfp, (uint8 *)channel2tracebuffer, 3000, 0);
+          result = ui_write_waveform_data(&viewfp, (uint8 *)channel2tracebuffer, 3000);
+          if(result == FR_OK && viewfilesetupdata[3] == ROLL_WAVEFORM_VERSION)
+            result = scope_write_roll_waveform(&viewfp);
         }
       }
     }
 
     //Close the file
-    f_close(&viewfp);
+    if(f_close(&viewfp) != FR_OK && result == FR_OK)
+      result = FR_DISK_ERR;
 
     //Check if all went well
     if(result == FR_OK)
@@ -4078,6 +4103,7 @@ int32 ui_load_trace_data(void)
   //Point to the file numbers
   uint16 *fnptr = (uint16 *)viewfilenumberdata;
   uint32 result;
+  UINT received;
 
   //Setup the file name for this view item
   ui_print_file_name(fnptr[viewcurrentindex]);
@@ -4088,12 +4114,14 @@ int32 ui_load_trace_data(void)
   //Check if file opened ok
   if(result == FR_OK)
   {
-    //Checks on correct number of bytes read might be needed
     //Load the setup data to the file setup data buffer
-    if((result = f_read(&viewfp, (uint8 *)viewfilesetupdata, sizeof(viewfilesetupdata), 0)) == FR_OK)
+    result = f_read(&viewfp, (uint8 *)viewfilesetupdata, sizeof(viewfilesetupdata), &received);
+    if(result == FR_OK && received != sizeof(viewfilesetupdata)) result = FR_DISK_ERR;
+    if(result == FR_OK)
     {
       //Check if the version of the file is wrong
-      if((viewfilesetupdata[1] != WAVEFORM_FILE_ID1) || (viewfilesetupdata[2] != WAVEFORM_FILE_ID2) || (viewfilesetupdata[3] != WAVEFORM_FILE_VERSION))
+      if((viewfilesetupdata[1] != WAVEFORM_FILE_ID1) || (viewfilesetupdata[2] != WAVEFORM_FILE_ID2) ||
+         ((viewfilesetupdata[3] != WAVEFORM_FILE_VERSION) && (viewfilesetupdata[3] != ROLL_WAVEFORM_VERSION)))
       {
         //No need to load the rest of the data
         result = WAVEFORM_FILE_ERROR;
@@ -4104,10 +4132,16 @@ int32 ui_load_trace_data(void)
       else
       {
         //Load the channel 1 sample data
-        if((result = f_read(&viewfp, (uint8 *)channel1tracebuffer, 3000, 0)) == FR_OK)
+        result = f_read(&viewfp, (uint8 *)channel1tracebuffer, 3000, &received);
+        if(result == FR_OK && received != 3000) result = FR_DISK_ERR;
+        if(result == FR_OK)
         {
           //Load the channel 2 sample data
-          if((result = f_read(&viewfp, (uint8 *)channel2tracebuffer, 3000, 0)) == FR_OK)
+          result = f_read(&viewfp, (uint8 *)channel2tracebuffer, 3000, &received);
+          if(result == FR_OK && received != 3000) result = FR_DISK_ERR;
+          if(result == FR_OK && viewfilesetupdata[3] == ROLL_WAVEFORM_VERSION)
+            result = scope_read_roll_waveform(&viewfp);
+          if(result == FR_OK)
           {
             //Do a check on file validity
             if((result = ui_check_waveform_file()) == 0)
@@ -4161,12 +4195,8 @@ int32 ui_load_trace_data(void)
     return(VIEW_TRACE_LOAD_OK);
   }
 
-  //Remove the current item from the thumbnnails and delete the item from disk, since the file is faulty and thus no longer needed
-  ui_remove_item_from_thumbnails(1);
-
-  //Save the thumbnail file
-  ui_save_thumbnail_file();
-
+  //A read error or unsupported version is not permission to delete a capture.
+  //Leave the file and its thumbnail available for retry, export or explicit deletion.
   return(VIEW_TRACE_LOAD_ERROR);
 }
 

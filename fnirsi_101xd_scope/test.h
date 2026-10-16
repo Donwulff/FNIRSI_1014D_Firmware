@@ -44,8 +44,20 @@ void average_filter(uint8* input, size_t size, size_t window_size);
 
 void scope_get_long_timebase_data(void);
 #if PORT_1014D
+#define ROLL_WIDTH 698
+#define ROLL_TRACE_BREAK 4
+#define ROLL_WAVEFORM_VERSION 0x01000003
+#define ROLL_FILE_SETTING_OFFSET 168
+#define ROLL_FILE_PAYLOAD_SIZE (ROLL_WIDTH * 7)
 void scope_reset_long_timebase(void);
 void scope_display_long_trace_data(void);
+uint32 scope_roll_waveform_active(void);
+void scope_prepare_roll_waveform(void);
+uint32 scope_roll_waveform_checksum(void);
+uint32 scope_check_roll_waveform(void);
+void scope_restore_roll_waveform(void);
+FRESULT scope_write_roll_waveform(FIL *fp);
+FRESULT scope_read_roll_waveform(FIL *fp);
 #endif
 
 void scope_check_long_trigger(void);

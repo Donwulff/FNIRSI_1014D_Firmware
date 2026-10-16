@@ -18,6 +18,8 @@ No RTOS, no libc (`-nostdlib`). Built with `arm-none-eabi-gcc`.
   When reviewing project status or planning upstream integration, run
   `python3 tools/check_upstreams.py`; report failures as incomplete checks and only
   advance its baseline after reviewing the changes. This command is not a background job.
+- **`WAVEFORM_FORMAT.md`** — legacy sweep files and the 1014D v1.0.0.3 timestamped
+  roll snapshots. `tools/roll_waveform_csv.py` exports actual observed columns/times.
 
 ## Commit workflow
 
@@ -172,6 +174,9 @@ rearming retains the completed display while waiting for its next trigger. File 
 suppress live roll sampling and rendering; stopped time is excluded on resume.
 `disp_long_mode` keeps the cached roll trace visible after switching to short acquisition
 until a completed short readout clears it, avoiding the false flat trace at 200 ms/div.
+Since 2026-10-16, roll waveform saves serialize a separate column cache, validity/break
+flags and observation timestamps. File viewing/zoom use that cache without clearing
+the retained live cache. Old sweep files still load; old roll files lack recoverable timing.
 100/200 ms/div still wait for complete FPGA captures; no partial-buffer readout is used.
 The 1013D's original roll path is unchanged. In short mode, the
 1014D main loop owns rendering after key handling; `scope_acquire_trace_data()` must not

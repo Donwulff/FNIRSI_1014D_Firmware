@@ -24,7 +24,7 @@ port; this was a status reconciliation and targeted code check, not a new exhaus
    Integer Vrms precision remains limited. The latest PECOS comparison does not establish
    a port-specific zero-offset regression; see §5h before reopening the old A/B hypothesis.
 4. **Optional instrument features:** noise averaging/persistence (25), PC capture/control
-   (13), AWG (14), and accurate serialization of roll sample timing (12). These are
+   (13), and AWG (14). Roll snapshot timing (12) is implemented 2026-10-16. These are
    separate features, not missing pieces of the September fixes.
 5. **Maintenance:** extract shared helpers before further UI separation (3), reproduce
    vendor references (8), simplify builds (6), and reduce duplicate docs (19).
@@ -122,9 +122,9 @@ The numbered sections below preserve the development history; newer status notes
     normal/single in roll).*
     *2026-10-16 status: §§5f/5i/5j replace that renderer with nonblocking, elapsed-time
     sampling and a retained per-column display cache. Item 32 is closed. Roll is used
-    at 500 ms/div and slower; 100/200 ms/div wait for complete FPGA captures. The saved
-    waveform format does not preserve roll column timing/cache, so accurate roll-file
-    playback/export remains a real software limitation.*
+    at 500 ms/div and slower; 100/200 ms/div wait for complete FPGA captures. Saved roll
+    timing/cache is now implemented (PORT_AUDIT §5m; WAVEFORM_FORMAT.md), including
+    timestamped CSV export. Timing omitted by old roll files cannot be recovered.*
 13. **PC interface on the 1014D** — USB CDC (`cdc_class.c`/`PC_interface.c`) is compiled but
     only reachable from touch UI; wire a key/menu item to toggle MSC↔CDC (`USB_CH340`).
     Long-standing target shape (donwulff-notes.md): a **sigrok-compatible** data-logger /

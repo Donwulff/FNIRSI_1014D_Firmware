@@ -63,7 +63,11 @@ class FirmwareTests(unittest.TestCase):
                     functions.extend(function("scope_functions.c", name) for name in port)
                     functions.extend(function("menu_1014d.c", name) for name in (
                         "ui_display_vavg", "ui_prepare_setup_for_file",
-                        "ui_restore_setup_from_file", "ui_check_waveform_file"))
+                        "ui_restore_setup_from_file", "ui_check_waveform_file",
+                        "ui_write_waveform_data", "ui_load_trace_data"))
+                    functions.extend(function("sm_1014d.c", name) for name in (
+                        "sm_item_view_goto_next_item", "sm_item_view_goto_previous_item",
+                        "sm_set_time_base"))
                     functions.append(function("fpga_control.c", "fpga_do_conversion"))
                     source = (SCOPE / "test.c").read_text()
                     functions.append(source[source.index("//Roll samples are read live"):source.index("void scope_reset_long_timebase(void)")])
