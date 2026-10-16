@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "checked_on": "2026-10-16",
+  "repositories": [
+    {
+      "repository": "Atlan4/Fnirsi1013D",
+      "reviewed_commit": "b0397d631092ff929a6528bf9b9090b420430226",
+      "imported_source": {
+        "path": "Verzia 1.xxx/DSO 1.xxx/backup dso/v1.00o5.zip",
+        "git_blob": "62e0700397e548b9571a2b050d99869c638c87de",
+        "sha256": "ab63e7ba2ebb12e0218f9a74f85d4ddd5d6a285a472c973635d71b8aa4f6335f",
+        "local_vendor_commit": "9daa91f"
+      }
+    },
+    {
+      "repository": "pecostm32/FNIRSI_1013D_Firmware",
+      "reviewed_commit": "51f4872173cf516cfe2f6f0ae5c95f2732bf85ff"
+    },
+    {
+      "repository": "pecostm32/FNIRSI_1014D_Firmware",
+      "reviewed_commit": "b9ea2aed2784c1e3b41215f127e303e750e39e9d"
+    }
+  ]
+}

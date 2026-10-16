@@ -251,46 +251,37 @@ Timing tables (`time_div_texts[35]`, `time_per_div_sample_rate[35]`,
 timebases — that difference was the root cause of the broken timebase keys, fixed by making
 `sm_set_time_base()` mirror `scope_set_timebase()` (PORT_AUDIT.md F1/§5).
 
-## Known issues (updated 2026-08-21)
+## Current status and known issues (2026-10-16)
 
-Working on hardware: SD boot via 1014D bootloader, Si5351 init, traces, UART keys (MENU→USB
-mount), menu navigation. Fixed in code, **hardware verification pending** (checklist in
-PORT_AUDIT.md §4): timebase keys incl. long timebases, overlay-menu compositing (traces keep
-updating live under main/channel menus, sliders, on/off panels — full-screen views still
-suppress traces), version-string overlap (variant suffix removed from display), 1013D-variant
-touch/battery/RTC restoration; Factory settings menu (defaults / reboot / FEL / sampling
-clock / acquisition probe — replaces the hidden F-key boot-switch). From the 2026-07-09
-bench observations, fixed in code (verify on
-hardware): AUTO no longer paints touch chrome (menu.c's shared chrome functions now route to
-their `ui_` equivalents on 1014D), no more false flat trace or touch-scroller flash on
-timebase changes (`scope_preset_values()` guards), the Position trim works
-(`scope_calculate_sample_range_properties()` was truncated — never set
-`trigger_position_min/max`), and AUTO clears `long_mode`. **SOLVED (2026-07-12, F25):** the
-≤200 ns/div sawtooth was Atlan4 commenting out the FPGA `0x28` mode-select in `fpga_do_conversion`
-(wrong "not support" guess); restored on the stock `fw_FPGA==1` path, bench-confirmed gone
-(PORT_AUDIT.md F25). Base calibration no longer changes the sampling
-clock (2026-07-10 — it used to overclock first and then calibrate *at* the overclock, making
-the sawtooth worse; clock experiments now live in Factory settings → Sampling clock).
-**Status (2026-08-21):** the findings log since F25 lives in PORT_AUDIT.md F26–F35; the
-blow-by-blow narrative that used to sit here (the 2026-07-10 night pass F12–F17, the
-pre-F25 sawtooth investigation, the interleave verdicts) is historical — see PORT_AUDIT.md
-§5c/§5d. Where things stand: F27 heisenbug verdict — F24/F26 both non-causal, acquisition
-audited code-identical to pecostm32, the graft is at pecostm32 parity and the pivot to his
-base is off the table. Implemented, hardware-verify pending: F28 (honest measurement
-precision + hi-res Vavg) and the seam sweep F31–F33 (AC/DC coupling was never pushed to
-the FPGA — inherited from pecostm32; Q16-vs-Q20 time readouts 16× off; overclock-blind
-frequency). Bench-verified: F29's −22 V display symptom (dash guard, 2026-07-17), F34
-spacing. Capture-geometry thread CLOSED 2026-07-21: ring mod-4096, ~2500-sample
-post-trigger fill (FPGA_NOTES.md §capture geometry). **Open:** F30 (Base-cal
-non-repeatable +7 mV residual, gated on a pecostm32 A/B — F29's stale-value root cause
-folds under it), the roll-mode `0x28/0x01` half of F25 (deferred to a test.c deep pass),
-F35 (one-shot offset jump, unreproduced). **2026-08-21 full review + same-day code-fix
-pass** (REVIEW-2026-08-21.md; findings filed in PORT_AUDIT.md): found + fixed in code,
-hw-verify pending — uint16 traceposition/time-cursor wraps, trigger-level re-push on
-v/div change, trigger-source swap on channel disable, wave-view `!waveviewmode` guard in
-`sm_set_time_base`, CDC `f` clamp + config-restore clamp, `UINT32_SAMPLE_BUFFER_SIZE`
-round-up, X-Y negative-index guard, 1014D `get_fattime` fixed timestamp, RTC-block guard,
-base-cal `0x0E` restore, F28 resolution rescale, acqprobe CH1 gating (+ analyzer). Policy
-(2026-08-21): no 1013D hardware here — where 1014D fixes could have been extended, the
-1013D variant is deliberately left at Atlan4 behavior (a known divergence vs pecostm32's
-1013D upstream; needs testing on real hardware). Backlog in ROADMAP.md.
+The current work ranking lives in ROADMAP.md's opening checkpoint. Detailed findings,
+fix history and hardware acceptance live in PORT_AUDIT.md; use its later sections when
+an older finding says a now-fixed item is open. Upstream revisions and source-drop review
+instructions are in UPSTREAM.md (`python3 tools/check_upstreams.py`).
+
+Implemented: the 1014D UI/key paths, stock-FPGA fast-timebase and roll command fixes,
+overlay compositing, trigger/coupling fixes, SD settings relocation/migration, USB write
+packet preservation and capacity reply, valid-capture Vavg, diagnostic failure handling,
+source-built dual-FPGA loader, clock-search screen restoration, elapsed-time roll sampling,
+and retained roll traces through sweep wrap and transition to short acquisition.
+See PORT_AUDIT.md §§5f–5j for the September/October changes. F1–F6 measurement keys are
+wired; Base calibration and its status screens are wired. Hardware verification remains
+pending wherever those records say so.
+
+Remaining software limitations: UART1 transmit/response polling is unbounded; no GitHub
+CI runs the existing host regressions and variant builds; compiler warnings remain noisy;
+roll waveform files omit the display cache/timing; Vrms still loses fractional precision;
+GEN is an empty action and the 1014D UI has no PC-control/CDC entry. Further UI separation
+requires extracting shared helpers first, as described above. MMU/D-cache enablement and
+custom FPGA timing/constraints remain separate development projects.
+
+F30's grounded-input residual remains unresolved. The 2026-09-29 PECOS A0.002 comparison
+also showed a positive residual, superseding the earlier near-zero recollection. Both
+calibration implementations omit final compensated-zero verification/correction; that is
+an improvement candidate, not an established cause. See PORT_AUDIT.md §5h before changing
+calibration. F35's one-shot offset jump remains unreproduced. The F25 sawtooth and its
+roll-command follow-up are implemented fixes, not open calibration work.
+
+The 1013D variant is deliberately kept at Atlan4 behavior except for documented shared
+fixes and restoration of its boolean move-speed contract. It has no hardware acceptance
+from this tree. The custom-FPGA project is built but never flashed; use fpga/README.md for
+its timing, installation and recovery requirements.

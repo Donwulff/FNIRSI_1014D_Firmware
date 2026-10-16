@@ -203,16 +203,20 @@ notes preserved in `PORT_A.md`.
 | `main` | Pristine `pecostm32/FNIRSI_1013D_Firmware` upstream (fork base, kept unmodified) |
 | `PORT_A` | The 2023 first-generation 1014D port (superseded; see `PORT_A.md`) |
 
-## Status (2026-08-21)
+## Status (2026-10-16)
 
-The 1014D variant runs on hardware: SD boot via pecostm32's 1014D bootloader, Si5351 clock
-init, live traces, key/rotary input, menus, USB mass storage. A full multi-agent code review
-(`REVIEW-2026-08-21.md`, 100 confirmed findings) and two fix waves have landed — including a
-rebuilt roll/long-timebase mode driven by the stock FPGA protocol recovered from bus
-captures — with hardware verification pending on most of it. The **1013D variant compiles
+The 1014D variant runs on hardware: SD boot, Si5351 clock init, live traces, key/rotary
+input, menus and USB mass storage. The September fixes address SD settings overlap,
+invalid/stale measurements, clock search and acquisition diagnostics. Normal builds now
+compile the 1014D loader from source with stock/custom-FPGA readiness checks and bounded
+failure recovery. Roll mode uses elapsed-time sampling and retains the previous sweep
+ahead of the scan; the October fix also retains it until a short capture completes.
+Hardware acceptance remains pending where recorded in `PORT_AUDIT.md`.
+The **1013D variant compiles
 and is kept deliberately at Atlan4's behavior** (no 1013D hardware here to test on); it has
 never been hardware-tested from this tree. Current known issues live in `CLAUDE.md`
-(§Known issues) and the findings log `PORT_AUDIT.md`.
+(§Known issues) and the findings log `PORT_AUDIT.md`. Current software priorities are
+summarized at the top of [ROADMAP.md](ROADMAP.md).
 
 ## Building and flashing
 
@@ -235,7 +239,7 @@ map: `CLAUDE.md` (build/load sections) and `BOOT_NOTES.md`.
 - `fpga/` — a self-contained Anlogic TD project retargeting Atlan4's AL3 replacement-FPGA
   design to the stock 1014D board. **Built, never flashed** — read `fpga/README.md` and
   `FPGA_NOTES.md` before going anywhere near it.
-- `tools/` — host-side analyzers for on-scope capture data.
+- `tools/` — capture analyzers, image-layout checks, host regressions and upstream tracking.
 - Docs: `CLAUDE.md` (orientation), `PORT_AUDIT.md` (findings log F1+),
   `FPGA_NOTES.md` (FPGA protocol + capture geometry), `BOOT_NOTES.md` (boot chain +
   loader contracts), `ROADMAP.md` (backlog), `REVIEW-2026-08-21.md` (full review record),
@@ -251,6 +255,10 @@ The deep-reference vendor checkouts the docs cite (`Atlan4-1.00o5/`,
 Fetch them from the upstream repos below if you need them.
 
 ## Upstream repositories and references
+
+Run `python3 tools/check_upstreams.py` for a read-only comparison against the reviewed
+upstream revisions. [UPSTREAM.md](UPSTREAM.md) records the baseline and explains how to
+review Atlan4's ZIP source drops. No background schedule is installed.
 
 - pecostm32 — [FNIRSI_1013D_Firmware](https://github.com/pecostm32/FNIRSI_1013D_Firmware),
   [FNIRSI_1014D_Firmware](https://github.com/pecostm32/FNIRSI_1014D_Firmware),

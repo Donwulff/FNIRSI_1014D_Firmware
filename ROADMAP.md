@@ -3,6 +3,38 @@
 Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roughly by
 (value ÷ effort) within each section. Strike items as they land or get rejected.
 
+## Current priorities — 2026-10-16
+
+Reviewed firmware HEAD `6868ac1`; this checkpoint excludes pending bench acceptance
+from the work ranking. The September R1–R10 fixes, source-built dual-FPGA loader,
+clock-search redraw, elapsed-time roll sampling and retained roll display are implemented
+(`PORT_AUDIT.md` §§5f–5j). The review found no new stop-work defect in the stock-FPGA
+port; this was a status reconciliation and targeted code check, not a new exhaustive audit.
+
+1. **Bound/nonblock the UART poll (item 4).** Both transmit-ready and response waits
+   in `uart1_receive_data()` are still unbounded. A missing response can stop the main
+   loop. Preserve the key controller's request/response protocol and queued key events.
+2. **Automate the existing host checks and both ARM builds (item 9), then reduce
+   warnings (item 5).** Host regressions exist and pass; GitHub CI does not exist.
+   Keep variant artifacts isolated and finish local builds with 1014D selected.
+3. **Calibration/measurement improvements (items 21–22).** Final compensated-zero
+   verification/correction is absent in both this port and PECOS. Integer Vrms precision
+   also remains limited. The latest PECOS comparison does not establish a port-specific
+   zero-offset regression; see §5h before reopening the old A/B hypothesis.
+4. **Optional instrument features:** noise averaging/persistence (25), PC capture/control
+   (13), AWG (14), and accurate serialization of roll sample timing (12). These are
+   separate features, not missing pieces of the September fixes.
+5. **Maintenance:** extract shared helpers before further UI separation (3), reproduce
+   vendor references (8), simplify builds (6), and reduce duplicate docs (19).
+
+Custom FPGA and MMU/D-cache work remain separate projects. The FPGA loader source gate
+is fixed; the existing FPGA report still has six setup errors (TNS −3.384 ns), and timing
+constraints need review. The recorded TD license expiry was 2026-08-31; current licensed
+rebuild availability has not been checked. None of this blocks the stock-FPGA firmware.
+
+Upstream inventory and repeatable review procedure: [UPSTREAM.md](UPSTREAM.md).
+The numbered sections below preserve the development history; newer status notes win.
+
 ## Now / next bench session
 
 1. **Hardware-verify the fix passes** — PORT_AUDIT.md §4 (timebase sweep incl. long/roll
@@ -23,12 +55,11 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
 
 ## Refactors that pay for themselves
 
-3. **Finish the file-level UI swap** (plan already in AGENTS.md): compile `menu.c`,
-   `statemachine.c`, `generator.c`, `PC_interface.c`, `touchpanel.c` only for the 1013D
-   variant and `menu_1014d.c`/`sm_1014d.c`/`uart.c`/`clock_synthesizer.c` only for the
-   1014D. Kills the whole class of "1013D chrome reachable on 1014D" bugs (audit found
-   several), shrinks the image, and makes `scope_setup_main_screen()`-style ambiguity
-   impossible. Needs conditional object lists in `nbproject/Makefile-Debug.mk` (or item 6).
+3. **Separate shared helpers from the remaining touch UI files.** The 1014D UI and
+   state machine are already active. `menu.c`, `statemachine.c`, `generator.c` and
+   `PC_interface.c` still contain shared functions used by the 1014D. Extract those
+   dependencies before conditional object lists or whole-file guards; simply excluding
+   these files breaks the link. See CLAUDE.md's variant-separation description.
 4. **Non-blocking key input** — `uart1_get_user_input()` busy-waits on the key controller
    every main-loop pass, gating the frame rate on UART turnaround. Move UART1 RX to the
    interrupt controller (interrupt.c infra exists) or a poll-without-wait design; add rotary
@@ -42,31 +73,36 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
    bitten: `-fcommon`, variant objects). This also unlocks item 3 cleanly.
 7. **Dead weight removal** — `strcpy.s` (never compiled, wrong-semantics trap),
    `compile.sh`/`burn.sh`/`debug.sh` (stale STM32 leftovers), stray
-   `dist/.../scope-1014D.bin`, and a decision on `test.c` (debug scaffolding).
+   `dist/.../scope-1014D.bin`, and unused functions in `test.c`. The active roll
+   implementation lives in `test.c`; the file itself is not disposable scaffolding.
 8. **Repo hygiene for the reference trees** — `Atlan4-1.00o5/`, `FNIRSI_1013D_Firmware/`,
    `FNIRSI_1014D_Firmware/` are untracked local-only checkouts the docs now depend on; make
    them submodules or add a `fetch-refs.sh` + note so a fresh clone can reproduce the
-   workspace.
+   workspace. *2026-10-16: UPSTREAM.md now pins the source archive/commits and documents
+   retrieval; an automatic reference-fetch command is still optional future work.*
 9. **CI** — a GitHub Action that builds both variants (arm-none-eabi-gcc is apt-installable),
-   fails on new warnings, and publishes the packed images as artifacts. The repo has zero
-   automated checks today; this is the cheapest one that matters. Related dev-infra lead
+   fails on new warnings, and publishes the packed images as artifacts. Host regression
+   tests and packaging checks already exist (added September); `.github/` CI is still
+   absent as of 2026-10-16. Related dev-infra lead
    (donwulff-notes.md): froloffw7's fork adds **SD-card emulation for QEMU** — running the
    ARM firmware on a desktop would give a smoke-test tier above "build succeeded" (FPGA/UART
    would need stubbing; unexplored).
 
 ## Features (1014D as an instrument)
 
-10. **Finish key coverage** — F3–F6 soft keys, cursor keys (H_CUR/V_CUR states exist in
-    `sm_1014d.c`), measurements-menu slots; audit `sm_handle_user_input()` against the full
-    `UIC_*` table for unhandled codes.
+10. **Key coverage audit, if a specific missing action is reported.** F1–F6 already open
+    all six measurement slots in `sm_button_dial_normal_handling()`; the old F3–F6 TODO was stale.
+    GEN is still an empty case (item 14). Cursor states exist; their existence alone
+    does not establish a missing feature or complete coverage of every UI state.
 11. **Calibration track** — wire/verify the imported calibration UI (`menu_1014d.c` has
-    CALIBRATION_STATE screens) against sector-708 input-calibration storage; per-ADC
+    CALIBRATION_STATE screens) against persistent input-calibration storage; per-ADC
     compensation on this unit's front end.
     *Substantially landed 2026-07-10/11 (annotated 2026-08-21): Base cal runs and persists
     across power cycles (F19), per-ADC interleave compensation with the manual Trim CH1/CH2
-    UI (F20/F21), comp measured at pecostm32's 2 MSa/s (3de7675). Sector-708 is moot on a
-    1014D (never written there — F19). Remainder: any still-unwired CALIBRATION_STATE
-    screens, plus the F30 residual (item 22).*
+    UI (F20/F21), comp measured at pecostm32's 2 MSa/s (3de7675). Since 2026-09-20,
+    calibration/settings use sectors 2046/2047 on 1014D; 708/709 are legacy migration
+    sources. Start/busy/success/fail/hide calibration screens are wired in the state
+    machine. Remaining measurement issue: the F30 residual (item 22).*
 12. **Roll-mode/long-timebase UX** — newly reachable from keys after the F1 fix; verify,
     then polish (it's trigger-off streaming; the UI should say so).
     *Verified 2026-07-11 (PORT_AUDIT F21; annotated 2026-08-21): boundary retuned — roll is
@@ -81,7 +117,12 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
     Also implemented: the stock roll FPGA sequence (`0x0D`+`0x28/0x01` before every 0x24/0x26
     read cycle — F25's other half) and an ADC-space roll software trigger (the old
     `+25`/`multiply` screen mapping was wrong away from centre and its uint16 wrap killed
-    normal/single in roll). Remaining roll UX: item 32.*
+    normal/single in roll).*
+    *2026-10-16 status: §§5f/5i/5j replace that renderer with nonblocking, elapsed-time
+    sampling and a retained per-column display cache. Item 32 is closed. Roll is used
+    at 500 ms/div and slower; 100/200 ms/div wait for complete FPGA captures. The saved
+    waveform format does not preserve roll column timing/cache, so accurate roll-file
+    playback/export remains a real software limitation.*
 13. **PC interface on the 1014D** — USB CDC (`cdc_class.c`/`PC_interface.c`) is compiled but
     only reachable from touch UI; wire a key/menu item to toggle MSC↔CDC (`USB_CH340`).
     Long-standing target shape (donwulff-notes.md): a **sigrok-compatible** data-logger /
@@ -94,9 +135,10 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
     this was never a regression of ours. Getting it working = stock-firmware RE: Ghidra the
     stock 1014D binary's generator UI for the FPGA commands it sends, or logic-analyzer
     capture of the Port E bus while driving the generator under stock (loader F2 boots
-    stock). Atlan4's 0x50–0x52 are replacement-FPGA-only; the old "hung on fresh flash" is
-    consistent with an unknown command wedging the stock FPGA's command parser (the
-    then-unbounded 0x05 ready-wait would spin forever) — keep them fenced off stock.
+    stock). Atlan4's 0x50–0x52 implement its replacement-FPGA generator. The August
+    review retracted the command-parser explanation for the old panel hang: that panel
+    had only drawing calls, while disabled-generator writes were already sent during
+    successful boots. Stock AWG support still requires protocol work; GEN remains empty.
 15. **Si5351 as a feature** — the clock generator is programmable at runtime; alternate ADC
     clocks (66/75/80 MHz were sketched in the old port; user ran 75 MHz → "300 MSa/s"
     apparently-working in 2023, unvalidated — FPGA_NOTES.md §frequency) or a cal-frequency
@@ -129,10 +171,11 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
     identical, analog side fully reshuffled) is **BUILT** — project + curated bitstream at
     `fpga/AL3_1014D/` (committed 2026-08-21, `1162978`; never flashed — FPGA_NOTES §TD
     rebuild), and the TD toolchain is installed and validated on both ends (laptop 5.0.4 GUI
-    + server 5.0.3 headless; **license expires 2026-08-31**). Flashing = CH341A on the
+    + server 5.0.3 headless; **recorded license expiry 2026-08-31**, renewal unverified).
+    Flashing = CH341A on the
     board's `FPGA_FLASH` header J2 (or TD JTAG on J5) — the scope CPU has no path to the
-    FPGA flash; details FPGA_NOTES.md §pecostm32-RE. Remaining pre-flash gate: item 17's
-    loader `0x1432` patch (plus the flashing route itself).
+    FPGA flash; details FPGA_NOTES.md §pecostm32-RE. Item 17's loader source patch landed
+    2026-09-23. FPGA timing/constraints work and the installation/recovery gates remain.
 17. **Patch `fnirsi_1014d_startup` first**: relax the `0x1432` spin (bricks the boot path
     under any other bitstream — Atlan4's v0.8 simply never calls it; follow that precedent),
     optionally adopt the boot byte (item 2), rebuild `bootloader_1014d_base.bin`,
@@ -165,9 +208,12 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
     mean something.
     *Done in code for Vavg 2026-07-12 (`averagesum` + hi-res `ui_display_vavg`; hardware-verify
     pending). Vrms still integer-divides then integer-`isqrt`s — open.*
-22. **Zero a shorted channel in Base calibration (F30).** Root-cause and fix the non-repeatable
-    +7–10 mV residual on a grounded input (trace above 0 V). Gate on the pecostm32 shorted-input
-    A/B first (his ~0 vs ours +7 ⇒ our cal; both +7 ⇒ inherent front-end).
+22. **Zero a shorted channel in Base calibration (F30).** The residual remains unresolved.
+    The 2026-09-29 PECOS A0.002 comparison also showed a positive residual, superseding
+    the earlier PECOS-near-zero recollection. Both implementations truncate intermediate
+    calibration averages and omit a final compensated-mean verification/correction.
+    That is a concrete improvement candidate, not proof of the observed offset's cause
+    or proof that the residual is entirely hardware. See PORT_AUDIT.md §5h.
 23. **Guard disabled-channel measurements (F29).** `ui_display_measurements` draws every slot
     unconditionally; blank/dash slots whose channel is disabled (fixes CH2 showing −22 V).
     *Done in code + bench-verified 2026-07-17 (both renderers dash disabled slots). The
@@ -294,15 +340,13 @@ bitstream (deeper/settable capture via 0x0B/0x0C) is a separate track (items 16�
     section map with DRAM write-back cacheable, the DEBE-scanned framebuffer write-through
     or uncached, everything `0x01Cxxxxx`/`0x01Exxxxx` device-uncacheable (FPGA Port-E bus,
     INTC, SD, USB FIFO, TCON/DEBE), cache clean/invalidate discipline at the DMA seams.
-32. **Roll wait loop should poll keys.** `scope_get_long_timebase_data`'s inter-sample wait
-    (up to 1 s/sample at 50 s/div) only exits by timeout on the 1014D — the touch-abort is a
-    stub — so keys feel dead in roll. Design: slice the wait and poll the key controller
-    between slices (needs a non-blocking or pushback-capable uart1 read).
-33. **MSC protocol repairs, designed but NOT applied (need host-side bench):** WRITE_10
-    silently drops one 512 B packet per staging-buffer flush (large-write corruption,
-    inherited from Atlan4/pecostm32); READ_FORMAT_CAPACITY replies with stale/zero bytes in
-    the wrong response format. The read-error desync + range-guard + eject-gate fixes DID
-    land 2026-08-21.
+32. ~~Roll wait loop should poll keys.~~ **Done in code 2026-09-20**, refined 2026-09-29:
+    the 1014D roll timer is nonblocking, so the main loop continues handling keys between
+    samples. The separate UART request/response wait still needs item 4.
+33. ~~MSC WRITE_10 / READ_FORMAT_CAPACITY repairs.~~ **Done in code 2026-09-09**
+    (`b47d55d`): retain packets across staging-buffer flushes and construct the correct
+    format-capacity response. The read-error desync + range-guard + eject-gate fixes
+    landed 2026-08-21. These are no longer unimplemented fixes.
 34. **test.c dead-code sweep (extends item 7):** `scope_get_long_timebase_data1` (alternate
     roll renderer), `fpga_average_trace_data_long`, the soft-float DSP helpers (one carries
     a 16 KB stack array), and the CSV exporter — all uncalled yet linked into both variants.

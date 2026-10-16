@@ -13,7 +13,11 @@ No RTOS, no libc (`-nostdlib`). Built with `arm-none-eabi-gcc`.
 - **`PORT_AUDIT.md`** (2026-07-09) — full static audit of the graft: verified-good list, findings F1–F9 + same-day fix pass §5 (timebase root cause fixed; the strcpy finding was retracted — see its F2), and corrections to a few claims in this file (§3 errata).
 - **`FPGA_NOTES.md`** — FPGA command inventory, fw_FPGA 1/2/3 paths, long-timebase reality, and the new-FPGA migration assessment (version-word hazard!).
 - **`BOOT_NOTES.md`** — boot chain, SD sector map, loader contracts (the 1014D loader has NO persistent boot byte), self-update/recovery paths, bootloader migration assessment.
-- **`ROADMAP.md`** — proposed improvements/refactors/features (suggestions, dated 2026-07-09).
+- **`ROADMAP.md`** — proposed improvements/refactors/features; current priorities checkpoint 2026-10-16.
+- **`UPSTREAM.md`** — pinned Atlan4/Pecostm32 references and source-drop review procedure.
+  When reviewing project status or planning upstream integration, run
+  `python3 tools/check_upstreams.py`; report failures as incomplete checks and only
+  advance its baseline after reviewing the changes. This command is not a background job.
 
 ## Commit workflow
 
@@ -109,7 +113,11 @@ The Atlan4 1013D code has NO input abstraction layer on the touch side: `touch_h
 
 Rationale: valuable Atlan4 changes (acquisition, math, FPGA) are in shared files; UI changes to `menu.c` are 1013D-specific and irrelevant to 1014D's button UI. File-level swap keeps Atlan4 merges to `menu.c` clean and gives the 1014D a proper hardware-button UI.
 
-**Status:** `menu_1014d.c` + `sm_1014d.c` imported from the fork and committed (4a5fa61). Both compile and link in the 1014D build — objects are listed **explicitly** in `nbproject/Makefile-Debug.mk` (no wildcard). Next: wire up the 1014D UI paths and remove 1013D chrome guards.
+**Status (2026-10-16):** the 1014D UI and key paths are wired and active. The table is the
+separation goal, not the current object list: both variants compile the same explicit list.
+`menu.c`, `statemachine.c`, `generator.c` and `PC_interface.c` still supply shared helpers
+used by the 1014D. Extract those before excluding files or adding whole-file guards;
+see CLAUDE.md's three variant-separation mechanisms and ROADMAP item 3.
 
 ## Gotchas (hard-earned)
 
