@@ -34,8 +34,8 @@ The payload begins at byte 6960:
 
 | Payload offset | Size | Meaning |
 |---|---|---|
-| 0 | 698 bytes | CH1 compensated ADC codes by display column |
-| 698 | 698 bytes | CH2 compensated ADC codes by display column |
+| 0 | 698 bytes | CH1 averaged ADC codes by display column |
+| 698 | 698 bytes | CH2 averaged ADC codes by display column |
 | 1396 | 698 bytes | Flags: bit 0 CH1 valid, bit 1 CH2 valid, bit 2 break before this column |
 | 2094 | 2792 bytes | 698 uint32 observation ticks; one timestamp for the paired channel read cycle |
 
@@ -44,6 +44,9 @@ zeroed when saving. A break applies even on a column with no observation. Connec
 observations only within an unbroken segment; do not join retained sweeps across the
 scan head. Gaps between observations represent missed read opportunities, not measured
 zeroes or repeated samples. The screen interpolates lines between valid observations.
+Roll reads average mixed ADC data from FPGA commands `0x24`/`0x26`; they do not apply
+the separate ADC1/ADC2 interleave compensation used by sweep acquisition. The new final
+calibration step verifies compensated sweep samples, including when roll was selected.
 
 Observation age in milliseconds is unsigned `(snapshot_tick - observation_tick)`.
 This handles one timer wrap; timing is ambiguous for observations retained over an
@@ -70,7 +73,7 @@ python3 tools/roll_waveform_csv.py path/to/1.wav /tmp/roll.csv
 ```
 
 The CSV lists observed column, screen x, segment, time relative to save in milliseconds,
-and raw compensated ADC codes for enabled/valid channels (zero volts is code 128).
+and averaged ADC codes for enabled/valid channels (zero volts is code 128).
 Empty fields mean the channel was not sampled. Rows follow screen-column order, so times
 can run backwards at a retained sweep boundary. Do not connect different segment values.
 This exporter rejects old sweep/roll files and corrupt or incomplete snapshots instead

@@ -133,6 +133,8 @@ clobbering — but the trees remain build-nothing-here provenance references).
   Since 2026-09-20 the 1014D uses calibration/settings sectors 2046/2047 instead of
   708/709; existing installations need the documented FEL-first migration.
 - **`ROADMAP.md`** — proposed improvements/refactors/features (dated suggestions).
+- **`WAVEFORM_FORMAT.md`** — 1014D legacy sweep and timestamped roll file layouts,
+  checksums, CSV export, timing limits and older-firmware compatibility.
 - **`AGENTS.md`** — opencode's context file for the same tree: module layout, display
   double-buffering architecture, hard-earned gotchas (guard placement, `int8` signedness,
   non-ISO `strcpy`, UART polling, buffer adjacency). Mostly accurate; see PORT_AUDIT.md §3
@@ -262,15 +264,17 @@ Implemented: the 1014D UI/key paths, stock-FPGA fast-timebase and roll command f
 overlay compositing, trigger/coupling fixes, SD settings relocation/migration, USB write
 packet preservation and capacity reply, valid-capture Vavg, diagnostic failure handling,
 source-built dual-FPGA loader, clock-search screen restoration, elapsed-time roll sampling,
-and retained roll traces through sweep wrap and transition to short acquisition.
-See PORT_AUDIT.md §§5f–5j for the September/October changes. F1–F6 measurement keys are
+retained roll traces through sweep wrap and transition to short acquisition, nonblocking
+UART polling, final compensated-zero calibration verification/correction, and timestamped
+roll waveform save/load/export.
+See PORT_AUDIT.md §§5f–5m for the September/October changes. F1–F6 measurement keys are
 wired; Base calibration and its status screens are wired. Hardware verification remains
 pending wherever those records say so.
 
 Remaining software limitations: no GitHub CI runs the existing host regressions and
-variant builds; compiler warnings remain noisy;
-Vrms still loses fractional precision;
-GEN is an empty action and the 1014D UI has no PC-control/CDC entry. Further UI separation
+variant builds; compiler-warning cleanup is deferred to limit upstream merge churn;
+Vrms still loses fractional precision; GEN is an empty action and the 1014D UI has no
+PC-control/CDC entry. Further UI separation
 requires extracting shared helpers first, as described above. MMU/D-cache enablement and
 custom FPGA timing/constraints remain separate development projects.
 

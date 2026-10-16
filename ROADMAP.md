@@ -5,8 +5,10 @@ Written 2026-07-09 after the port audit + fix pass (PORT_AUDIT.md). Ordered roug
 
 ## Current priorities — 2026-10-16
 
-Reviewed firmware HEAD `6868ac1`; this checkpoint excludes pending bench acceptance
-from the work ranking. The September R1–R10 fixes, source-built dual-FPGA loader,
+Initial status review used firmware HEAD `6868ac1`; the 2026-10-16 follow-up fixes
+are committed as `9aad854` (UART), `3886186` (calibration) and `150d2b9` (roll files).
+This checkpoint excludes pending bench acceptance from the work ranking.
+The September R1–R10 fixes, source-built dual-FPGA loader,
 clock-search redraw, elapsed-time roll sampling and retained roll display are implemented
 (`PORT_AUDIT.md` §§5f–5j). The review found no new stop-work defect in the stock-FPGA
 port; this was a status reconciliation and targeted code check, not a new exhaustive audit.
@@ -66,7 +68,9 @@ The numbered sections below preserve the development history; newer status notes
    returns immediately if TX/RX is not ready and retries a missing reply after 20 ms.
    Pending commands are retained; empty replies are paced to at most one poll/ms.
    Further rotary acceleration remains optional. See PORT_AUDIT.md §5k.
-5. **Warning cleanup → then `-Werror`** — the 234 `-Wpointer-sign` warnings are mechanical
+5. **Warning cleanup → then `-Werror` — deferred by user preference (2026-10-16).**
+   Avoid broad type/formatting churn while tracking upstream changes. The historical
+   234 `-Wpointer-sign` warnings are mechanical
    `int8*`/`char*` mismatches from the (correct) signed-int8 fix; unify the string types
    (`char*` for text, `int8` only for numeric bytes). Real bugs hide badly in 260-line
    warning spew.
@@ -215,8 +219,9 @@ The numbered sections below preserve the development history; newer status notes
     the earlier PECOS-near-zero recollection. Both implementations truncate intermediate
     calibration averages. The 1014D final compensated-mean verification/correction is now
     implemented (2026-10-16, PORT_AUDIT §5l); assess its effect before further zero-level work.
-    That is a concrete improvement candidate, not proof of the observed offset's cause
-    or proof that the residual is entirely hardware. See PORT_AUDIT.md §5h.
+    This is a targeted calibration improvement, not proof of the observed offset's cause
+    or proof that the residual is entirely hardware. Further F30 work is deferred;
+    see PORT_AUDIT.md §§5h/5l.
 23. **Guard disabled-channel measurements (F29).** `ui_display_measurements` draws every slot
     unconditionally; blank/dash slots whose channel is disabled (fixes CH2 showing −22 V).
     *Done in code + bench-verified 2026-07-17 (both renderers dash disabled slots). The
@@ -260,7 +265,7 @@ bitstream (deeper/settable capture via 0x0B/0x0C) is a separate track (items 16�
     phase-locked ⇒ no natural phase walk; demo with an external source (user's standalone
     TCXO once powered/verified) or the detune helper (item 28).
 27. **Burst-capture infrastructure + ring-dump probe** (the enabler; do first). Timer-measure
-    real captures/s (estimate 100–500/s; UART key poll must be skipped during a burst), and
+    real captures/s (estimate 100–500/s; keep rendering/input dispatch outside the timed burst), and
     dump the full ~4096/ADC ring after a one-shot pulse to answer the post-trigger-fill
     question (FPGA_NOTES §capture geometry) — decides whether the 2.7× unread ring is
     pre-trigger history or post-trigger record, and validates 8190-sample extended reads.
@@ -345,7 +350,8 @@ bitstream (deeper/settable capture via 0x0B/0x0C) is a separate track (items 16�
     INTC, SD, USB FIFO, TCON/DEBE), cache clean/invalidate discipline at the DMA seams.
 32. ~~Roll wait loop should poll keys.~~ **Done in code 2026-09-20**, refined 2026-09-29:
     the 1014D roll timer is nonblocking, so the main loop continues handling keys between
-    samples. The separate UART request/response wait still needs item 4.
+    samples. The separate UART request/response wait is also fixed as of 2026-10-16
+    (item 4, PORT_AUDIT §5k).
 33. ~~MSC WRITE_10 / READ_FORMAT_CAPACITY repairs.~~ **Done in code 2026-09-09**
     (`b47d55d`): retain packets across staging-buffer flushes and construct the correct
     format-capacity response. The read-error desync + range-guard + eject-gate fixes

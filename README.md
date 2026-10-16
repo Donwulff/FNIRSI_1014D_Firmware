@@ -211,12 +211,17 @@ invalid/stale measurements, clock search and acquisition diagnostics. Normal bui
 compile the 1014D loader from source with stock/custom-FPGA readiness checks and bounded
 failure recovery. Roll mode uses elapsed-time sampling and retains the previous sweep
 ahead of the scan; the October fix also retains it until a short capture completes.
+The 2026-10-16 changes add nonblocking UART polling, a final measured compensated-zero
+correction in Base calibration, and timestamped roll waveform snapshots with CSV export.
+Calibration diagnostics show the final per-range residuals; the wider F30 zero-level
+investigation and compiler-warning cleanup are deferred. See `PORT_AUDIT.md` §§5k–5m
+and [WAVEFORM_FORMAT.md](WAVEFORM_FORMAT.md), including its older-firmware compatibility note.
 Hardware acceptance remains pending where recorded in `PORT_AUDIT.md`.
 The **1013D variant compiles
 and is kept deliberately at Atlan4's behavior** (no 1013D hardware here to test on); it has
 never been hardware-tested from this tree. Current known issues live in `CLAUDE.md`
-(§Known issues) and the findings log `PORT_AUDIT.md`. Current software priorities are
-summarized at the top of [ROADMAP.md](ROADMAP.md).
+(§Current status and known issues) and the findings log `PORT_AUDIT.md`. Current software
+priorities are summarized at the top of [ROADMAP.md](ROADMAP.md).
 
 ## Building and flashing
 

@@ -4,6 +4,14 @@ Consolidated from code spelunking 2026-07-09 (tree at Atlan4 v1.00o5 base + 1014
 Everything here was read out of `fpga_control.c` / `scope_functions.c` in this tree unless
 marked otherwise. Line numbers drift; grep the identifiers.
 
+**2026-10-16 firmware update:** Base calibration now finishes with measured
+compensated-zero verification/correction on all six hardware ranges (PORT_AUDIT.md §5l).
+It uses the selected sweep rate, or a 2MSa/s verification sweep when roll is selected.
+Roll reads (`0x24`/`0x26`) average mixed ADC data and do not apply separate ADC1/ADC2
+compensation; the final step verifies the sweep path. Roll display observations/timestamps
+are now preserved in v1.0.0.3 waveform files; layout and export: WAVEFORM_FORMAT.md.
+These changes do not establish the cause of F30 or change FPGA command encodings/bitstreams.
+
 ## Bus and transaction model
 
 The FPGA is driven over a bit-banged parallel bus on **Port E** (macros in `fpga_control.h`):
@@ -57,7 +65,7 @@ Legacy/stock commands (pecostm32-original, all fw paths):
 | `0x15` `0x16` `0x17` | trigger channel / edge / level |
 | `0x1A` | trigger mode |
 | `0x1F` | set read pointer, before ADC reads |
-| `0x28` | mode select (`0x00` fast / `0x01` roll) — sent **every conversion** on the fw1/1014D path since F25 (2026-07-12, table row corrected 2026-08-21); the roll-mode `0x28/0x01` in `fpga_set_long_timebase` is still commented out ("0X28 not support in FPGA???") — see §SOLVED follow-up |
+| `0x28` | mode select (`0x00` fast / `0x01` roll) — sent **every conversion** on the fw1/1014D path since F25 (2026-07-12); roll entry and every roll read cycle send `0x28/0x01` through `fpga_arm_long_timebase_cycle()` (implemented 2026-08-21) |
 | `0x29` | dual-ADC mode select (`0x01`) — sent alongside `0x28` every conversion since F25 |
 | `0x38` | backlight brightness (`short`) — PWM lives in the FPGA (why the panel flashes until the FPGA has clocks) |
 | `0x3C` | "battery level"-ish write (`short 32431`) — **never sent**: writer `fpga_set_battery_level()` and its lone call site are both commented out (as in pristine Atlan4; noted 2026-08-21); purpose decoded in §special IC (the U5 `0x3C`/`0x41` loopback handshake) |
@@ -89,13 +97,18 @@ the ROADMAP-14 "unknown command wedges the stock FPGA's parser" hang hypothesis 
 ## Long vs short time base (how it actually works)
 
 Atlan4's 35-entry `timeperdiv` space: indices 0–10 = "long" (50 s/div … 20 ms/div),
-11–34 = short. `scope_set_timebase()` (and since the 2026-07-09 fix pass, the 1014D's
-`sm_set_time_base()`) skips 9/10 in scope mode and flips `scopesettings.long_mode`.
+11–34 = short. The 1014D's `sm_set_time_base()` uses indices 0–6 (50s/div–500ms/div)
+for live roll and 11–34 for sweep; the live dial skips duplicate indices 7–10. The 1013D's
+touch path retains Atlan4's boundary behavior. Saved roll snapshots can zoom through
+indices 0–10 without changing hardware acquisition settings.
 
 - **Short**: `0x0E` timebase/samplecount + `0x0D` rate; triggered acquisition.
-- **Long**: `fpga_set_long_timebase()` is mostly gutted — all it really does is **disable the
-  trigger system** (`0x0F` data `0x01`); the rate still goes via `0x0D`, and acquisition
-  switches to the roll-mode path `scope_get_long_timebase_data()` in the main loop.
+- **Long**: `fpga_set_long_timebase()` disables the trigger system (`0x0F` data `0x01`).
+  On the stock-FPGA 1014D path it also sends the entry reset rate `0x0D/0x27` and calls
+  `fpga_arm_long_timebase_cycle()`. That helper sends `0x0D/0x000007D0` and `0x28/0x01`
+  at entry and before every roll read cycle. `scope_get_long_timebase_data()` times
+  observations without blocking; `scope_display_long_trace_data()` renders the cache.
+  The 1013D path retains the original entry behavior.
 
 ## Stock-FPGA capture geometry (code + RE 2026-07-17; bench-measured 2026-07-19)
 

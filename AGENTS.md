@@ -87,6 +87,16 @@ Output (names since the 2026-08-21 `fnirsi_101xd` rename):
 **Broken/wrong (known issues):**
 - **GUI is partly touch-oriented still** — leftover 1013D chrome paths; the file-level UI swap below is the plan
 
+**Implemented 2026-10-16 (hardware verification pending):** nonblocking UART polling
+(`9aad854`), final compensated-zero calibration verification/correction (`3886186`),
+and timestamped roll waveform save/load/export (`150d2b9`). Base calibration checks all
+six hardware ranges using settled compensated sweep captures, permits up to three
+DAC corrections, and requires a remeasured residual within ±0.5 ADC count. Roll selection
+uses a 2MSa/s verification sweep. Diagnostics `z1 mADC`/`z2 mADC` show thousandths of an
+ADC count; either-channel failure retains both channels' previous calibration. See
+PORT_AUDIT.md §§5k–5m and WAVEFORM_FORMAT.md. Compiler-warning cleanup and the wider F30
+zero-level investigation are deferred; assess the final calibration step first.
+
 ## Module layout
 
 - **`clock_synthesizer.c`** — Si5351 I²C init. Called early in main() BEFORE FPGA init to stabilize clock.
@@ -162,7 +172,7 @@ Set `PORT_A_KEYDEBUG 1` in `port_config.h` for:
 
 ## Display architecture (double-buffering)
 
-**1014D roll path (updated 2026-10-02):** `scope_get_long_timebase_data()` only samples,
+**1014D roll path (updated 2026-10-16):** `scope_get_long_timebase_data()` only samples,
 with a nonblocking timer. Horizontal position follows elapsed milliseconds, preserving
 fractional intervals; a late loop records one actual sample at its current position.
 `scope_display_long_trace_data()` rebuilds the display from a per-column sample cache,

@@ -11,6 +11,12 @@ A0.002 as well as this port. The older F30 observation that PECOS reads zero is 
 reliable as a current discriminator. F27's environmental-EMI attribution remains a
 hypothesis, not an established cause of either noise or DC offset.
 
+**2026-10-16 implementation update:** §§5k–5m record nonblocking UART polling, final
+compensated-zero verification/correction, and timestamped roll waveform save/load/export.
+Earlier dated statements about missing verification or roll-file timing describe their
+state at the time and are superseded by those sections. F30 remains open; further
+zero-level work and compiler-warning cleanup are deferred. Hardware acceptance is pending.
+
 ## Method
 
 Four trees were cross-compared file-by-file and hunk-by-hunk:
