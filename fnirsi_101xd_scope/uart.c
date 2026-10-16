@@ -4,6 +4,14 @@
 #include "gpio_control.h"
 #include "uart.h"
 #include "variables.h"
+#include "timer.h"
+
+//One request may be outstanding. Retry a silent controller after 20ms without
+//holding up acquisition; pace empty replies even in the modal input waits.
+#define UART_POLL_INTERVAL_MS 1
+#define UART_REPLY_TIMEOUT_MS 20
+static uint8 uart1_poll_pending;
+static uint32 uart1_poll_ticks;
 
 //----------------------------------------------------------------------------------------------------------------------------------
 //The connections for the UART are on:
@@ -38,23 +46,42 @@ void uart1_init(void)
 
   //Setup the UART for working with 8 bit data, 1 stop bit and no parity
   *UART1_LC_REG = UART_LCR_WLEN8;
+
+  uart1_poll_pending = 0;
+  uart1_poll_ticks = timer0_get_ticks() - UART_REPLY_TIMEOUT_MS;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
 
 uint8 uart1_receive_data(void)
 {
-  //Wait for the UART to be ready to transmit new data
-  while((*UART1_LS_REG & UART_LSR_TEMT) == 0);
+  uint32 status = *UART1_LS_REG;
+  uint32 now = timer0_get_ticks();
+  uint8 data;
 
-  //Send the poll request byte to the target
-  *UART1_TX_REG = 0xFF;
+  //Consume a reply before considering a retry, including replies arriving after
+  //a long acquisition or modal screen. Never overwrite an unprocessed key.
+  if(status & UART_LSR_DR)
+  {
+    data = *UART1_RX_REG;
+    uart1_poll_pending = 0;
+    if(status & (UART_LSR_PE | UART_LSR_FE | UART_LSR_BI))
+      return 0;
+    return data;
+  }
 
-  //Wait for the response from the target
-  while((*UART1_LS_REG & UART_LSR_DR) == 0);
+  if(uart1_poll_pending && (uint32)(now - uart1_poll_ticks) < UART_REPLY_TIMEOUT_MS)
+    return 0;
 
-  //Return the received data
-  return(*UART1_RX_REG);
+  if((uint32)(now - uart1_poll_ticks) >= UART_POLL_INTERVAL_MS &&
+     (status & UART_LSR_TEMT))
+  {
+    *UART1_TX_REG = 0xFF;
+    uart1_poll_ticks = now;
+    uart1_poll_pending = 1;
+  }
+
+  return 0;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------------
@@ -77,7 +104,8 @@ uint8 uart1_get_user_input(void)
 
 void uart1_wait_for_user_input(void)
 {
-  //Wait for the user to push a button or rotate a dial on the front panel of the scope
+  //Modal confirmation screens deliberately wait for input. The UART transaction
+  //itself is still nonblocking and retries if the controller temporarily vanishes.
   while((lastreceivedcommand = uart1_receive_data()) == 0);
 }
 

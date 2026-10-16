@@ -121,7 +121,7 @@
 
 void uart1_init(void);
 
-//Requests data from the user interface controller and returns it to the caller
+//Nonblocking request/reply poll. Returns 0 while waiting or when no key is queued.
 uint8 uart1_receive_data(void);
 
 //Requests data from the user interface controller when no previous command is set and sets it in the toprocesscommand variable

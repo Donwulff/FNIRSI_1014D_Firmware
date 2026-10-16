@@ -225,8 +225,8 @@ on `enabletracedisplay` OR `ui_menu_composite_active()` — open overlay menus a
 into the offscreen buffer each frame by `ui_redraw_active_menu()`, so traces stay live under
 them). Config is saved on the key controller's power-off code (`UIC_BUTTON_OFF`).
 
-Input flow: `uart1_get_user_input()` returns a raw key byte (blocking poll — write `0xFF`,
-wait for response) that is dispatched directly against `UIC_BUTTON_*`/`UIC_ROTARY_*` codes in
+Input flow: `uart1_get_user_input()` returns a raw key byte (nonblocking `0xFF` request/reply
+poll with a 20 ms retry) that is dispatched directly against `UIC_BUTTON_*`/`UIC_ROTARY_*` codes in
 `sm_1014d.c` (the `GD_KEY_*` table in `uart.h` is documentation only; pecostm32's UIC mapping
 is the confirmed-correct one — PORT_AUDIT.md F5).
 
@@ -267,8 +267,8 @@ See PORT_AUDIT.md §§5f–5j for the September/October changes. F1–F6 measure
 wired; Base calibration and its status screens are wired. Hardware verification remains
 pending wherever those records say so.
 
-Remaining software limitations: UART1 transmit/response polling is unbounded; no GitHub
-CI runs the existing host regressions and variant builds; compiler warnings remain noisy;
+Remaining software limitations: no GitHub CI runs the existing host regressions and
+variant builds; compiler warnings remain noisy;
 roll waveform files omit the display cache/timing; Vrms still loses fractional precision;
 GEN is an empty action and the 1014D UI has no PC-control/CDC entry. Further UI separation
 requires extracting shared helpers first, as described above. MMU/D-cache enablement and

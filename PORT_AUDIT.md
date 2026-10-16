@@ -1000,6 +1000,23 @@ the preceding trace remains ahead of the scan and is replaced progressively; exe
 NORMAL trigger waiting/rearming and RUN/STOP; switch from roll to 200 ms/div and verify
 the old trace stays until the first completed short capture, without the flat-line flash.
 
+## 5k. 2026-10-16 nonblocking UART key polling
+
+`uart1_receive_data()` now checks TX/RX once per call, with one outstanding `0xFF`
+request and a 20 ms reply timeout before retrying. Replies take precedence over retries,
+including late replies after acquisition or modal screens; a pending dispatched key
+prevents further reads. Empty replies are paced at one request/ms, timer subtraction
+handles wrap, and framing/parity/break errors do not become key events. Modal
+`uart1_wait_for_user_input()` still deliberately waits for a confirmation key.
+
+Host tests exercise stuck TX, silence, timeout/recovery, late replies, queued keys,
+damaged bytes, idle pacing and timer wrap. Hardware verification pending: front-panel
+buttons/rotaries and modal confirmations, including power-off saving, should retain
+their behavior while acquisition continues between UART requests.
+
+Validation: all ten host regressions pass; the 1014D ARM build and SD layout check
+pass with `bootloader_1014d_base.bin` at offset `0x8000`.
+
 ## 6. Reproduction appendix
 
 ```bash

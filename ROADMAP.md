@@ -11,9 +11,9 @@ clock-search redraw, elapsed-time roll sampling and retained roll display are im
 (`PORT_AUDIT.md` §§5f–5j). The review found no new stop-work defect in the stock-FPGA
 port; this was a status reconciliation and targeted code check, not a new exhaustive audit.
 
-1. **Bound/nonblock the UART poll (item 4).** Both transmit-ready and response waits
-   in `uart1_receive_data()` are still unbounded. A missing response can stop the main
-   loop. Preserve the key controller's request/response protocol and queued key events.
+1. **Nonblocking UART poll (item 4) implemented 2026-10-16.** One outstanding request,
+   20 ms retries, no transmit/receive busy-waits, and pending commands preserved.
+   Hardware acceptance pending; modal confirmation screens still wait for a key.
 2. **Automate the existing host checks and both ARM builds (item 9), then reduce
    warnings (item 5).** Host regressions exist and pass; GitHub CI does not exist.
    Keep variant artifacts isolated and finish local builds with 1014D selected.
@@ -60,10 +60,10 @@ The numbered sections below preserve the development history; newer status notes
    `PC_interface.c` still contain shared functions used by the 1014D. Extract those
    dependencies before conditional object lists or whole-file guards; simply excluding
    these files breaks the link. See CLAUDE.md's variant-separation description.
-4. **Non-blocking key input** — `uart1_get_user_input()` busy-waits on the key controller
-   every main-loop pass, gating the frame rate on UART turnaround. Move UART1 RX to the
-   interrupt controller (interrupt.c infra exists) or a poll-without-wait design; add rotary
-   acceleration using the existing `movespeed`.
+4. **Nonblocking key input implemented (2026-10-16).** The UART request/reply state machine
+   returns immediately if TX/RX is not ready and retries a missing reply after 20 ms.
+   Pending commands are retained; empty replies are paced to at most one poll/ms.
+   Further rotary acceleration remains optional. See PORT_AUDIT.md §5k.
 5. **Warning cleanup → then `-Werror`** — the 234 `-Wpointer-sign` warnings are mechanical
    `int8*`/`char*` mismatches from the (correct) signed-int8 fix; unify the string types
    (`char*` for text, `int8` only for numeric bytes). Real bugs hide badly in 260-line
