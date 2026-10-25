@@ -630,6 +630,11 @@ require login. The TD 6.2 manual's device table omits AL3, so compatibility must
 checked before upgrading. See [fpga/TD_UPGRADE.md](fpga/TD_UPGRADE.md) for the current
 assessment and validation steps. The July installation/build notes below are historical;
 no replacement toolchain or renewed license has yet been validated.
+The original Linux install and both 5.0.x installers remain in `~/tools/anlogic-td/`.
+The Chinese catalog also lists 5.0.5 SP1 build 43066 for Linux/Windows; English navigation
+omits that branch. July's choice of Sipeed 5.0.x was driven by download availability,
+with no recorded rejection of other versions for compatibility. Anlogic says license
+renewal is free; the actual current license terms and newer-package AL3 support are pending.
 
 Goal: headless synth→P&R→bitgen on this Linux server; hands-on only for flashing.
 

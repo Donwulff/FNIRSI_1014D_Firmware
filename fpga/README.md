@@ -12,6 +12,8 @@ CH2 AC/DC driver, his relay pins = our ADC encode/data lines, etc.).
 **Toolchain check 2026-10-25:** the installed Linux license has expired and a rebuild
 fails. Anlogic lists TD 2026.2 for Linux/Windows and a September 23 license archive,
 but downloads require login and AL3 support in newer releases remains unverified.
+The existing Sipeed-sourced Linux 5.0.3 install and Windows 5.0.4 MSI are still cached;
+Anlogic's Chinese catalog also lists 5.0.5 SP1 for both OSes (absent from English navigation).
 See [TD_UPGRADE.md](TD_UPGRADE.md) for packages, hashes and Linux/Windows validation.
 
 ## Project layout (`AL3_1014D/`)

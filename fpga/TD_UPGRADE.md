@@ -5,21 +5,48 @@ The current Linux TD 5.0.3 installation cannot rebuild the AL3 project: a fresh
 expires **2026-08-31**. Windows TD 5.0.4 previously built the project successfully
 (2026-07-18); the laptop was not accessed during this assessment.
 
-**Next step: obtain the current license through Anlogic and test it with the existing
-5.0.x installations first.** Evaluate other TD releases alongside them after checking
-AL3 support. No new installer or license was downloaded, installed or validated in
-this assessment; the installed tools and curated bitstreams are unchanged.
+**Availability finding:** Anlogic's Chinese catalog still lists **TD 5.0.5 SP1 build
+43066 for Linux and Windows**, although its English page omits the 5.0 category.
+This is a candidate update to our Sipeed-sourced 5.0.3/5.0.4 installations. AL3
+support in 5.0.5 and newer branches must still be checked before selecting a replacement.
+No new installer or license was downloaded, installed or validated in this assessment.
+
+## Existing installations and why we used 5.0.x
+
+These files are still present in `/home/jsantala/tools/anlogic-td/`:
+
+| Local item | State |
+|---|---|
+| `TD_5.0.3_28716_NL/` | Installed Linux toolchain; used for the successful July 1014D retarget build. Contains `arch/al3_10.db` and `arch/al3_macro.v`. |
+| `TD_5.0.3_28716_NL_Linux.zip` | Original Linux archive, 434,013,232 bytes. |
+| `TD_5.0.4_27252_Win7_64bit_NL.msi` | Original Windows installer, 489,855,488 bytes; matches the user's Windows package. |
+| `TD_RELEASE_March2020_r4.6.4_RHEL.zip` | Downloaded fallback; archive also contains the AL3 database and primitive library, but this installation was not build-tested. |
+
+The July notes (already present in commit `204201d`) describe **download access** as
+the selection reason: Sipeed supplied 5.0.3 Linux / 5.0.4 Windows without an Anlogic
+account, while the vendor releases required registration/permission. There is no
+record that we tested and rejected 5.5, 5.6 or 6.x for compatibility. Successful
+5.0.x builds were subsequently recorded in July. Do not turn that availability
+choice into a claim that other versions were known incompatible.
 
 ## Current official downloads
 
-The [Anlogic download catalog](https://www.anlogic.com/support/tools-downloads?tp=2)
-lists these packages, checked 2026-10-25 with date-descending sorting:
+The [Chinese Anlogic download catalog](https://www.anlogic.com/support/tools-downloads)
+lists these packages, checked 2026-10-25 with date-descending sorting. Its **软件工具 →
+TD Windows / TD Linux → TD_5.0** categories contain the 5.0.5 packages; the
+[English catalog](https://www.anlogic.com/en/support/tools-downloads) only exposes
+4.6, 5.6, 6.0 and 6.2 categories.
 
 | Release | Published | Linux package | Windows package |
 |---|---|---|---|
 | TD 2026.2 / **6.2.3 build 210850** | 2026-09-11 | `TD_Release_2026.2_NL.zip` | `TD_Release_2026.2_NL.exe` |
 | TD 5.6.5 SP7 | 2026-05-19 | `TD_5.6.5_119222_SP7_NL.zip` | `TD_5.6.5_119222_SP7_NL.msi` |
 | TD 4.6.8 SP1.2 | 2026-05-11 | `TD_4.6.8_116866_SP1.2_NL.zip` | `TD_4.6.8_116866_SP1.2_NL.msi` |
+| TD 5.0.5 SP1 build 43066 | 2025-09-03 | `TD_5.0.5_43066_SP1_NL.zip` | `TD_5.0.5_43066_SP1_NL.msi` |
+
+Dates are catalog publication dates. The 5.0 category also retains entries for the
+same 5.0.5 SP1/build 43066 named as the December 2021 release, plus September 2021
+5.0.5/build 38657. A 2025 listing date does not establish a newly compiled release.
 
 The license entry is **`license_for_website.zip`, updated 2026-09-23**. This is its
 publication date, not its expiry date. The archive contents, license expiry, host
@@ -30,6 +57,10 @@ The catalog requires login for these installers, the license, and
 and Linux 2026.2 package returned the site's login-required response. Depending on
 membership level, Anlogic also asks users to complete their profile and request
 download permission from `web@anlogic.com`; no account was created or message sent.
+This does not establish a charge: Anlogic's
+[official support reply](https://tech.anlogic.com/Cn/Index/listView/catid/12/m/Cn/cate/32/tp/1/p/2.html)
+dated 2025-10-15 says expired TD licenses can be renewed **free** through FAE/sales.
+The current archive's terms and compatibility still require inspection.
 The public Sipeed
 [Primer](https://dl.sipeed.com/shareURL/TANG/Primer/IDE) and
 [Premier](https://dl.sipeed.com/shareURL/TANG/Premier/IDE) file lists were checked:
@@ -38,13 +69,26 @@ neither supplies a newer license than the local `Anlogic_20251116.lic`.
 ### AL3 compatibility is the deciding check
 
 Our project targets **AL3A10LG144C7**, using `al3_10.db` and `al3_macro.v`.
+
+| TD branch/version | Evidence for our AL3 device |
+|---|---|
+| 4.6.8 SP1 build 116866 | Atlan4's shipped project/reports target this device. New SP1.2 package not inspected. |
+| 5.0.3 Linux / 5.0.4 Windows | Successful builds already recorded in this repository. Linux files are still present. |
+| 5.0.5 SP1 build 43066 | Official packages listed for both OSes; archive/device support and build not yet inspected. |
+| 5.5 | Catalog explicitly labels 5.5.1–5.5.3 as **PH1A only**, and 5.5.4 as supporting PH1A. This is evidence that version branches are device-specific. |
+| 5.6.5 SP7 | Official packages listed for both OSes; AL3 support remains unverified. |
+| 6.2 / 2026.2 | Official manual's supported-device table omits AL3. Installer/device selection not inspected. |
+
 The permission-free official
 [TD 6.2 user guide](https://www.anlogic.com/cn/skippower/downloadFile/id/1240/mid/15.html)
 (document dated 2026-08, published 2026-09-14), printed page 10, lists supported
-devices but **does not list AL3**. It says the actual device list in the GUI controls.
+devices in **PH1, PH2, DR1, SF1, SF2, EG4, EF2, EF3, EF4 and EF5**, but **does not
+list AL3**. It says the actual device list in the GUI controls.
 This omission is a reason to require an explicit device check; it does not establish
 whether an uninspected installer contains AL3 support. TD 5.6.5 support is also
 unverified. A higher release number alone is insufficient to select a replacement.
+No official explanation for the AL3 omission was found; treating it as a legacy/newer
+device support split is an inference, not a documented removal announcement.
 
 The maintained **4.6.8 SP1.2** branch is another candidate: Atlan4 used 4.6.8 SP1
 build 116866 for this design. Its AL3 support and build results still need checking;
@@ -63,6 +107,8 @@ ed8d88ad648b99755f599b620ebf23992f732d372c9f5ceeced065d0377bfe55  TD_5.6.5_11922
 6ab13e51443812a75808fa7e1a6cc024fb1e11afc6426081d1e04223493f3bfd  TD_5.6.5_119222_SP7_NL.msi
 b9b197fb243e381feb194d54e477c213118c3e8c248285df5e76e18892feef55  TD_4.6.8_116866_SP1.2_NL.zip
 e8d66a0620ac2ecf0258532c49eab6e97f3364d7ebb710dde56e7fc76331b920  TD_4.6.8_116866_SP1.2_NL.msi
+547fc6566d72dbe88b86bdb54afab0b64024d3478114d1a52caac2b7a3b09ab8  TD_5.0.5_43066_SP1_NL.zip
+a2b46677af19389d0417d651091e2820cb9dc660e246040a536c7c9d847b1427  TD_5.0.5_43066_SP1_NL.msi
 ```
 
 ## Linux validation
