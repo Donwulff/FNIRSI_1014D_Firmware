@@ -33,8 +33,11 @@ port; this was a status reconciliation and targeted code check, not a new exhaus
 
 Custom FPGA and MMU/D-cache work remain separate projects. The FPGA loader source gate
 is fixed; the existing FPGA report still has six setup errors (TNS −3.384 ns), and timing
-constraints need review. The recorded TD license expiry was 2026-08-31; current licensed
-rebuild availability has not been checked. None of this blocks the stock-FPGA firmware.
+constraints need review. **Toolchain check 2026-10-25:** the installed Linux TD license
+expired 2026-08-31 and a rebuild fails. Anlogic has newer Linux/Windows releases and
+a 2026-09-23 license archive; obtaining the login-gated files and verifying AL3 support
+remain pending. See [fpga/TD_UPGRADE.md](fpga/TD_UPGRADE.md).
+None of this blocks the stock-FPGA firmware.
 
 Upstream inventory and repeatable review procedure: [UPSTREAM.md](UPSTREAM.md).
 The numbered sections below preserve the development history; newer status notes win.
@@ -177,7 +180,8 @@ The numbered sections below preserve the development history; newer status notes
     identical, analog side fully reshuffled) is **BUILT** — project + curated bitstream at
     `fpga/AL3_1014D/` (committed 2026-08-21, `1162978`; never flashed — FPGA_NOTES §TD
     rebuild), and the TD toolchain is installed and validated on both ends (laptop 5.0.4 GUI
-    + server 5.0.3 headless; **recorded license expiry 2026-08-31**, renewal unverified).
+    + server 5.0.3 headless; **2026-10-25: Linux rebuild fails with expired license**;
+    renewal/new-release validation pending, see [fpga/TD_UPGRADE.md](fpga/TD_UPGRADE.md)).
     Flashing = CH341A on the
     board's `FPGA_FLASH` header J2 (or TD JTAG on J5) — the scope CPU has no path to the
     FPGA flash; details FPGA_NOTES.md §pecostm32-RE. Item 17's loader source patch landed

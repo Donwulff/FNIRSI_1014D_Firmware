@@ -9,6 +9,11 @@ Both boards carry the same die (`AL3A10LG144C7`) but the analog side is wired co
 differently — Atlan4's own bitstream must never be flashed unmodified (his P133 = our
 CH2 AC/DC driver, his relay pins = our ADC encode/data lines, etc.).
 
+**Toolchain check 2026-10-25:** the installed Linux license has expired and a rebuild
+fails. Anlogic lists TD 2026.2 for Linux/Windows and a September 23 license archive,
+but downloads require login and AL3 support in newer releases remains unverified.
+See [TD_UPGRADE.md](TD_UPGRADE.md) for packages, hashes and Linux/Windows validation.
+
 ## Project layout (`AL3_1014D/`)
 
 - **`zaklad.v`** — Atlan4's top, byte-identical to vendor except blocks marked

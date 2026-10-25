@@ -623,6 +623,14 @@ pixel-diffing settled several open questions:
 
 ## Synthesis environment (Anlogic TD) — setup notes, downloaded 2026-07-10
 
+**Update 2026-10-25:** the installed Linux TD 5.0.3 now fails with `License expired!`.
+Anlogic lists TD 2026.2 (6.2.3 build 210850) for Linux and Windows, maintained 4.6.8
+and 5.6.5 branches, and `license_for_website.zip` updated 2026-09-23. These downloads
+require login. The TD 6.2 manual's device table omits AL3, so compatibility must be
+checked before upgrading. See [fpga/TD_UPGRADE.md](fpga/TD_UPGRADE.md) for the current
+assessment and validation steps. The July installation/build notes below are historical;
+no replacement toolchain or renewed license has yet been validated.
+
 Goal: headless synth→P&R→bitgen on this Linux server; hands-on only for flashing.
 
 **Status 2026-07-17: TD 5.0.4 build 27252 is installed on the user's Windows laptop**
